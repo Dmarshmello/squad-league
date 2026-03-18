@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit Match — Squad League</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="loading-screen" id="loader">
+  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+</div>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link" href="history.html">Match History</a>
+    <a class="nav-link" href="rules.html">Rules</a>
+  </div>
+  <a class="nav-submit active" href="submit.html">+ Submit Match</a>
+</nav>
+
+<main class="page" id="main" style="opacity:0">
+  <div class="page-title">Submit <span>Match</span></div>
+  <div class="page-subtitle">Record a result — points are calculated automatically</div>
+
+  <div class="form-wrap">
+
+    <!-- Step indicator -->
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-line" id="line-1"></div>
+      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-line" id="line-2"></div>
+      <div class="step-dot" id="dot-3">3</div>
+    </div>
+
+    <!-- STEP 1: Sport -->
+    <div class="form-step active" id="step-1">
+      <div class="form-card">
+        <div class="form-title">What sport?</div>
+        <div class="form-subtitle">Choose the sport played</div>
+
+        <div class="sport-picker">
+          <div class="sport-option" data-sport="Pool">
+            <div class="sport-option-icon">🎱</div>
+            <div class="sport-option-name">Pool</div>
+          </div>
+          <div class="sport-option" data-sport="Bowling">
+            <div class="sport-option-icon">🎳</div>
+            <div class="sport-option-name">Bowling</div>
+          </div>
+          <div class="sport-option" data-sport="Golf">
+            <div class="sport-option-icon">⛳</div>
+            <div class="sport-option-name">Golf</div>
+          </div>
+        </div>
+
+        <!-- Pool mode (only shown for Pool) -->
+        <div id="pool-mode-wrap" class="hidden mt-24">
+          <div class="form-subtitle">Choose the match format</div>
+          <div class="mode-picker">
+            <div class="mode-option" data-mode="Singles">
+              <div class="mode-option-name">1v1</div>
+              <div class="mode-option-desc">Singles</div>
+            </div>
+            <div class="mode-option" data-mode="2v1">
+              <div class="mode-option-name">2v1</div>
+              <div class="mode-option-desc">Two vs one</div>
+            </div>
+            <div class="mode-option" data-mode="2v2">
+              <div class="mode-option-name">2v2</div>
+              <div class="mode-option-desc">Teams</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row mt-24">
+          <button class="btn btn-primary btn-full" id="step1-next" disabled>Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Players -->
+    <div class="form-step" id="step-2">
+      <div class="form-card">
+        <div class="form-title" id="step2-title">Who played?</div>
+        <div class="form-subtitle" id="step2-sub">Select players in finishing order</div>
+
+        <div class="placement-list" id="placement-list"></div>
+
+        <div class="field mt-24">
+          <label class="field-label">Notes (optional)</label>
+          <input class="field-input" type="text" id="match-notes" placeholder="Any notes about the match...">
+        </div>
+
+        <div class="btn-row mt-8">
+          <button class="btn btn-secondary" id="step2-back">← Back</button>
+          <button class="btn btn-primary" id="step2-next" style="flex:1" disabled>Review →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: Confirm -->
+    <div class="form-step" id="step-3">
+      <div class="form-card" id="confirm-card">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/engine.js"></script>
+<script>
+
+let state = {
+  sport: null,
+  poolMode: null,
+  placements: [],  // [{ playerId, playerName, position, isWinner }]
+  players: [],
+  allPlayerIds: [],
+  cfg: null,
+  season: null,
+  seasonStandings: [],
+  currentStep: 1,
+};
+
+// ── TOAST ─────────────────────────────────────────────────────
+function toast(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── STEPS ─────────────────────────────────────────────────────
+function goStep(n) {
+  document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+  document.getElementById(`step-${n}`).classList.add('active');
+  state.currentStep = n;
+
+  for (let i = 1; i <= 3; i++) {
+    const dot  = document.getElementById(`dot-${i}`);
+    const line = document.getElementById(`line-${i}`);
+    dot.classList.toggle('active', i === n);
+    dot.classList.toggle('done',   i < n);
+    if (line) line.classList.toggle('done', i < n);
+  }
+}
+
+// ── STEP 1 ────────────────────────────────────────────────────
+document.querySelectorAll('.sport-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.sport-option').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+    state.sport = el.dataset.sport;
+
+    const poolWrap = document.getElementById('pool-mode-wrap');
+    if (state.sport === 'Pool') {
+      poolWrap.classList.remove('hidden');
+      state.poolMode = null;
+      document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
+      document.getElementById('step1-next').disabled = true;
+    } else {
+      poolWrap.classList.add('hidden');
+      state.poolMode = null;
+      document.getElementById('step1-next').disabled = false;
+    }
+  });
+});
+
+document.querySelectorAll('.mode-option').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+    state.poolMode = el.dataset.mode;
+    document.getElementById('step1-next').disabled = false;
+  });
+});
+
+document.getElementById('step1-next').addEventListener('click', () => {
+  buildPlacementUI();
+  goStep(2);
+});
+
+// ── STEP 2 ────────────────────────────────────────────────────
+function buildPlacementUI() {
+  const list  = document.getElementById('placement-list');
+  const sport = state.sport;
+  const mode  = state.poolMode;
+
+  let slots = [];
+
+  if (sport === 'Pool') {
+    if (mode === 'Singles') {
+      slots = [
+        { label: '1st / Winner', pos: 1, isWinner: true },
+        { label: '2nd / Loser',  pos: 2, isWinner: false },
+      ];
+    } else if (mode === '2v2') {
+      slots = [
+        { label: 'Winner 1',  pos: 1, isWinner: true  },
+        { label: 'Winner 2',  pos: 2, isWinner: true  },
+        { label: 'Loser 1',   pos: 3, isWinner: false },
+        { label: 'Loser 2',   pos: 4, isWinner: false },
+      ];
+    } else if (mode === '2v1') {
+      slots = [
+        { label: 'Winner 1',         pos: 1, isWinner: true  },
+        { label: 'Winner 2 (if 2v1)',pos: 2, isWinner: true, optional: true },
+        { label: 'Loser 1',          pos: 3, isWinner: false },
+        { label: 'Loser 2 (if 2v1)', pos: 4, isWinner: false, optional: true },
+      ];
+    }
+    document.getElementById('step2-title').textContent = `Pool — ${mode}`;
+    document.getElementById('step2-sub').textContent   = 'Select winners and losers';
+  } else {
+    // Bowling / Golf
+    const max = state.players.length;
+    slots = [
+      { label: '1st Place',  pos: 1 },
+      { label: '2nd Place',  pos: 2 },
+    ];
+    for (let i = 3; i <= Math.min(max, 6); i++) {
+      slots.push({ label: `${i}${['rd','th','th','th'][i-3]||'th'} Place`, pos: i, optional: true });
+    }
+    document.getElementById('step2-title').textContent = sport;
+    document.getElementById('step2-sub').textContent   = 'Select players in finishing order';
+  }
+
+  const playerOptions = state.players.map(p =>
+    `<option value="${p.id}">${p.name}</option>`
+  ).join('');
+
+  list.innerHTML = slots.map(slot => `
+    <div class="placement-row">
+      <div class="placement-pos ${slot.pos <= 2 ? 'pos-'+slot.pos : ''}">${slot.pos}</div>
+      <div class="placement-label">${slot.label}</div>
+      <select class="placement-select" data-pos="${slot.pos}" data-winner="${slot.isWinner||false}" data-optional="${slot.optional||false}">
+        <option value="">— ${slot.optional ? 'optional' : 'select'} —</option>
+        ${playerOptions}
+      </select>
+    </div>
+  `).join('');
+
+  // Watch selects for validation
+  list.querySelectorAll('.placement-select').forEach(sel => {
+    sel.addEventListener('change', validateStep2);
+  });
+  validateStep2();
+}
+
+function validateStep2() {
+  const selects = document.querySelectorAll('#placement-list .placement-select');
+  const required = [...selects].filter(s => s.dataset.optional !== 'true');
+  const allFilled = required.every(s => s.value);
+
+  // Check no duplicates
+  const vals = [...selects].map(s => s.value).filter(Boolean);
+  const unique = new Set(vals).size === vals.length;
+
+  document.getElementById('step2-next').disabled = !allFilled || !unique;
+  if (!unique) toast('Each player can only appear once', 'error');
+}
+
+document.getElementById('step2-back').addEventListener('click', () => goStep(1));
+
+document.getElementById('step2-next').addEventListener('click', () => {
+  const selects = document.querySelectorAll('#placement-list .placement-select');
+  state.placements = [...selects]
+    .filter(s => s.value)
+    .map(s => ({
+      playerId:  s.value,
+      playerName: state.players.find(p => p.id === s.value)?.name || '?',
+      position:  parseInt(s.dataset.pos),
+      isWinner:  s.dataset.winner === 'true',
+    }));
+  buildConfirmUI();
+  goStep(3);
+});
+
+// ── STEP 3: CONFIRM ───────────────────────────────────────────
+function buildConfirmUI() {
+  const card = document.getElementById('confirm-card');
+  const sport = state.sport;
+  const mode  = state.poolMode;
+
+  const sorted = [...state.placements].sort((a,b) => a.position - b.position);
+
+  const confirmRows = sorted.map(p => `
+    <div class="confirm-row">
+      <div class="confirm-pos">${p.position}</div>
+      <div class="confirm-name">${p.playerName}</div>
+      ${p.isWinner !== undefined ? `<span class="tag ${p.isWinner?'tag-king':'text-muted'}" style="margin-left:auto">${p.isWinner?'Winner':'Loser'}</span>` : ''}
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <div class="form-title">Confirm Match</div>
+    <div class="form-subtitle">${sport}${mode ? ' · '+mode : ''}</div>
+
+    <div class="confirm-list">${confirmRows}</div>
+
+    <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:14px;font-size:13px;color:var(--muted);margin-bottom:20px">
+      ⚡ Points will be calculated with upset bonus, underdog multiplier, and king slay rules applied automatically.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="step3-back">← Back</button>
+      <button class="btn btn-accent" id="step3-submit" style="flex:1">
+        🏆 Submit Match
+      </button>
+    </div>`;
+
+  document.getElementById('step3-back').addEventListener('click', () => goStep(2));
+  document.getElementById('step3-submit').addEventListener('click', submitMatch);
+}
+
+// ── SUBMIT ────────────────────────────────────────────────────
+async function submitMatch() {
+  const btn = document.getElementById('step3-submit');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  try {
+    const { cfg, season, placements, sport, poolMode, seasonStandings, allPlayerIds } = state;
+
+    // 1. Insert match
+    const match = await DB.insertMatch(season.id, cfg.currentWeek, sport, poolMode,
+      document.getElementById('match-notes')?.value || '');
+
+    // 2. Insert placements
+    await DB.insertPlacements(match.id, placements.map(p => ({
+      playerId: p.playerId,
+      position: p.position,
+    })));
+
+    // 3. Build rank map
+    const rankMap = Engine.buildRankMap(seasonStandings, allPlayerIds);
+
+    // Add king/underdog IDs to cfg
+    cfg.currentKingId     = state.players.find(p => p.name === cfg.currentKing)?.id     || null;
+    cfg.currentUnderdogId = state.players.find(p => p.name === cfg.currentUnderdog)?.id || null;
+
+    // 4. Calculate points
+    const points = await Engine.calculate(
+      sport, poolMode, placements, cfg, season, rankMap, allPlayerIds
+    );
+
+    // 5. Write points
+    for (const [playerId, delta] of Object.entries(points)) {
+      const total = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
+      if (total !== 0) {
+        await DB.upsertWeekPoints(season.id, cfg.currentWeek, playerId, delta);
+        await DB.upsertSeasonPoints(season.id, playerId, delta);
+      }
+    }
+
+    // 6. Show success
+    showSuccess(points);
+
+  } catch (err) {
+    console.error(err);
+    toast('Error submitting match: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '🏆 Submit Match';
+  }
+}
+
+function showSuccess(points) {
+  const card = document.getElementById('confirm-card');
+
+  // Build points chips for players who earned something
+  const chips = Object.entries(points)
+    .filter(([, d]) => round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog) > 0)
+    .map(([playerId, d]) => {
+      const total  = round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog);
+      const player = state.players.find(p => p.id === playerId);
+      return `<div class="pts-chip"><span class="pts-name">${player?.name||'?'}</span><span class="pts-val">+${fmtPts(total)} pts</span></div>`;
+    }).join('');
+
+  card.innerHTML = `
+    <div class="success-card">
+      <div class="success-icon">🏆</div>
+      <div class="success-title">Match Recorded!</div>
+      <div class="success-sub">Points have been updated on the leaderboard</div>
+      ${chips ? `<div class="points-earned">${chips}</div>` : ''}
+      <div class="btn-row" style="justify-content:center">
+        <a class="btn btn-primary" href="index.html">← Dashboard</a>
+        <button class="btn btn-secondary" onclick="resetForm()">Submit Another</button>
+      </div>
+    </div>`;
+
+  // Reset step dots
+  document.getElementById('dot-1').classList.remove('active','done');
+  document.getElementById('dot-2').classList.remove('active','done');
+  document.getElementById('dot-3').classList.add('done');
+  document.getElementById('dot-3').classList.remove('active');
+}
+
+function resetForm() {
+  state.sport = null; state.poolMode = null; state.placements = [];
+  document.querySelectorAll('.sport-option,.mode-option').forEach(e => e.classList.remove('selected'));
+  document.getElementById('step1-next').disabled = true;
+  document.getElementById('pool-mode-wrap').classList.add('hidden');
+  goStep(1);
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [cfg, season, players] = await Promise.all([
+      DB.getConfig(),
+      DB.getActiveSeason(),
+      DB.getPlayers(),
+    ]);
+
+    const seasonStandings = await DB.getSeasonStandings(season.id);
+
+    state.cfg             = cfg;
+    state.season          = season;
+    state.players         = players;
+    state.allPlayerIds    = players.map(p => p.id);
+    state.seasonStandings = seasonStandings;
+
+    document.getElementById('loader').classList.add('hidden');
+    const main = document.getElementById('main');
+    main.style.opacity = '1';
+    main.style.transition = 'opacity 0.4s';
+
+  } catch(err) {
+    document.getElementById('loader').innerHTML =
+      `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px;font-weight:600">Could not load</div><div style="font-size:13px;color:var(--muted);margin-top:6px">${err.message}</div></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

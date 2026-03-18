@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Match History — Squad League</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="loading-screen" id="loader">
+  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+</div>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link active" href="history.html">Match History</a>
+    <a class="nav-link" href="rules.html">Rules</a>
+  </div>
+  <a class="nav-submit" href="submit.html">+ Submit Match</a>
+</nav>
+
+<main class="page" id="main" style="opacity:0">
+  <div class="page-title">Match <span>History</span></div>
+  <div class="page-subtitle">Every game, every result</div>
+
+  <!-- Filters -->
+  <div class="filter-bar" id="filter-bar">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="Pool">🎱 Pool</button>
+    <button class="filter-btn" data-filter="Bowling">🎳 Bowling</button>
+    <button class="filter-btn" data-filter="Golf">⛳ Golf</button>
+  </div>
+
+  <!-- Player filter -->
+  <div class="filter-bar" id="player-filter-bar" style="margin-top:-8px"></div>
+
+  <!-- Match list -->
+  <div id="matches-container">
+    <div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">Loading matches...</div></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/engine.js"></script>
+<script>
+
+let allMatches = [];
+let activeFilter = 'all';
+let activePlayer = 'all';
+
+function renderMatches() {
+  const container = document.getElementById('matches-container');
+  let filtered = allMatches;
+
+  if (activeFilter !== 'all') filtered = filtered.filter(m => m.sport === activeFilter);
+  if (activePlayer !== 'all') {
+    filtered = filtered.filter(m =>
+      (m.match_placements||[]).some(p => p.players?.name === activePlayer)
+    );
+  }
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches found</div></div>';
+    return;
+  }
+
+  // Group by week
+  const byWeek = {};
+  filtered.forEach(m => {
+    const w = m.week || '?';
+    if (!byWeek[w]) byWeek[w] = [];
+    byWeek[w].push(m);
+  });
+
+  const weeks = Object.keys(byWeek).sort((a,b) => b-a);
+  container.innerHTML = weeks.map(week => {
+    const matches = byWeek[week];
+    const rows = matches.map(m => {
+      const placements = (m.match_placements||[]).sort((a,b) => a.position-b.position);
+      const winner = placements[0]?.players?.name || '?';
+      const others = placements.slice(1).map(p => p.players?.name).filter(Boolean);
+      const sport  = m.sport || '';
+
+      return `
+        <div class="match-item">
+          <div class="match-sport-badge ${sport.toLowerCase()}">${SPORT_EMOJI[sport]||'🎯'}</div>
+          <div class="match-info">
+            <div class="match-winner">🏆 ${winner}</div>
+            <div class="match-detail">
+              ${sport}${m.pool_mode?' · '+m.pool_mode:''}
+              ${others.length ? '· ' + others.map((n,i) => `<span style="color:${i===0?'var(--accent2)':'var(--muted)'}">${n}</span>`).join(', ') : ''}
+              ${m.notes ? '· <em>'+m.notes+'</em>' : ''}
+            </div>
+          </div>
+          <div class="match-right">
+            <div class="match-date">${fmtDate(m.created_at)}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="margin-bottom:28px">
+        <div class="section-label">Week ${week}</div>
+        <div class="match-list">${rows}</div>
+      </div>`;
+  }).join('');
+}
+
+// Filter buttons
+document.getElementById('filter-bar').addEventListener('click', e => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('#filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.filter;
+  renderMatches();
+});
+
+async function init() {
+  try {
+    const [season, players] = await Promise.all([DB.getActiveSeason(), DB.getPlayers()]);
+    allMatches = await DB.getAllMatches(season.id);
+
+    // Player filters
+    const pfBar = document.getElementById('player-filter-bar');
+    pfBar.innerHTML = `<button class="filter-btn active" data-player="all">All Players</button>` +
+      players.map(p => `<button class="filter-btn" data-player="${p.name}">${p.name}</button>`).join('');
+
+    pfBar.addEventListener('click', e => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn || !btn.dataset.player) return;
+      pfBar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activePlayer = btn.dataset.player;
+      renderMatches();
+    });
+
+    renderMatches();
+
+    document.getElementById('loader').classList.add('hidden');
+    const main = document.getElementById('main');
+    main.style.opacity = '1';
+    main.style.transition = 'opacity 0.4s';
+
+  } catch(err) {
+    document.getElementById('loader').innerHTML =
+      `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px">${err.message}</div></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

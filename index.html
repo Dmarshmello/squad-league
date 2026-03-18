@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f0f2f7">
+  <title>Shooting Blanks — Squad League</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loader">
+  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
+  <div class="nav-links">
+    <a class="nav-link active" href="index.html">Dashboard</a>
+    <a class="nav-link" href="history.html">Match History</a>
+    <a class="nav-link" href="rules.html">Rules</a>
+  </div>
+  <a class="nav-submit" href="submit.html">+ Submit Match</a>
+</nav>
+
+<main class="page" id="main" style="opacity:0">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-left">
+      <div class="hero-eyebrow">
+        <span class="pulse"></span>
+        Live Season
+      </div>
+      <div class="hero-title">
+        SHOOTING<br><span class="accent">BLANKS</span>
+      </div>
+      <div class="hero-pills" id="hero-pills">
+        <div class="pill">Week <b id="hero-week">—</b></div>
+        <div class="pill">👑 <b id="hero-king">—</b></div>
+        <div class="pill">⚡ Underdog: <b id="hero-dog">—</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KING CARD -->
+  <div id="king-section"></div>
+
+  <!-- SPORT STATS -->
+  <div class="section-label mt-32">Sport Leaders</div>
+  <div class="stats-grid" id="sport-stats">
+    <div class="stat-card" data-sport="Pool">
+      <div class="stat-icon">🎱</div>
+      <div class="stat-label">Pool Leader</div>
+      <div class="stat-value" id="pool-leader">—</div>
+      <div class="stat-sub" id="pool-pts">0 pts</div>
+    </div>
+    <div class="stat-card" data-sport="Bowling">
+      <div class="stat-icon">🎳</div>
+      <div class="stat-label">Bowling Leader</div>
+      <div class="stat-value" id="bowling-leader">—</div>
+      <div class="stat-sub" id="bowling-pts">0 pts</div>
+    </div>
+    <div class="stat-card" data-sport="Golf">
+      <div class="stat-icon">⛳</div>
+      <div class="stat-label">Golf Leader</div>
+      <div class="stat-value" id="golf-leader">—</div>
+      <div class="stat-sub" id="golf-pts">0 pts</div>
+    </div>
+  </div>
+
+  <!-- PRIZE BANNER -->
+  <div class="prize-banner" id="prize-banner">
+    <div class="prize-icon">🍽️</div>
+    <div class="prize-text">
+      <div class="prize-title">Monthly Prize</div>
+      <div class="prize-name" id="prize-king">TBD</div>
+      <div class="prize-desc" id="prize-desc">Free meal — paid by everyone else</div>
+    </div>
+  </div>
+
+  <!-- TWO COLUMN: LEADERBOARD + THIS WEEK -->
+  <div class="two-col">
+    <div class="col-section">
+      <div class="section-label">Season Standings</div>
+      <div class="leaderboard" id="leaderboard">
+        <div class="empty"><div class="empty-icon">🏆</div><div class="empty-text">Loading...</div></div>
+      </div>
+    </div>
+    <div class="col-section">
+      <div class="section-label">This Week</div>
+      <div class="card-solid" style="padding:20px">
+        <table class="week-table" id="week-table">
+          <thead><tr>
+            <th>Player</th>
+            <th>Pool</th>
+            <th>Bowl</th>
+            <th>Golf</th>
+            <th style="text-align:right">Total</th>
+          </tr></thead>
+          <tbody id="week-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-label mt-24">Recent Matches</div>
+      <div class="match-list" id="recent-matches">
+        <div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches yet</div></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- SUPABASE -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/engine.js"></script>
+<script>
+// ── DASHBOARD LOGIC ──────────────────────────────────────────
+
+function avatarHtml(player, cls = 'player-avatar') {
+  if (player.photo_url) {
+    return `<div class="${cls}"><img src="${player.photo_url}" alt="${player.name}" onerror="this.parentNode.innerHTML='${initials(player.name)}'"></div>`;
+  }
+  return `<div class="${cls}">${initials(player.name)}</div>`;
+}
+
+function renderKing(king, standings, cfg) {
+  if (!king) return;
+  const row = standings.find(r => r.players?.name === king);
+  const seasonPts = row ? fmtPts(row.total) : '0';
+  const el = document.getElementById('king-section');
+  el.innerHTML = `
+    <div class="king-card">
+      <div class="king-badge">👑 King of the Week</div>
+      <div class="king-content">
+        ${avatarHtml(row?.players || { name: king }, 'king-avatar')}
+        <div>
+          <div class="king-name">${king}</div>
+          <div class="king-stats">
+            <span class="king-stat"><b>${seasonPts}</b> season pts</span>
+          </div>
+        </div>
+      </div>
+      <div class="king-slay">Beat <b>${king}</b> in any match to earn <b>+${cfg.kingSlay} bonus pts</b></div>
+    </div>`;
+}
+
+function renderLeaderboard(standings, allPlayers, cfg) {
+  const el = document.getElementById('leaderboard');
+  if (!standings.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div><div class="empty-text">No points yet — play some matches!</div></div>';
+    return;
+  }
+
+  // Merge in players with 0 pts
+  const seen = new Set(standings.map(r => r.player_id));
+  const extra = allPlayers
+    .filter(p => !seen.has(p.id))
+    .map(p => ({ player_id: p.id, players: p, total: 0, pool: 0, bowling: 0, golf: 0, bonus: 0, underdog: 0 }));
+  const rows = [...standings, ...extra];
+
+  el.innerHTML = rows.map((row, i) => {
+    const rank   = i + 1;
+    const player = row.players || { name: '?', photo_url: null };
+    const isKing = player.name === cfg.currentKing;
+    const isDog  = player.name === cfg.currentUnderdog;
+    const rankClass = rank <= 3 ? `rank-${rank}` : '';
+    const dogClass  = isDog ? 'underdog' : '';
+
+    const tags = [
+      isKing ? '<span class="tag tag-king">👑 King</span>' : '',
+      isDog  ? '<span class="tag tag-dog">⚡ Underdog</span>' : '',
+    ].filter(Boolean).join('');
+
+    return `
+      <div class="player-row ${rankClass} ${dogClass}" style="animation-delay:${i*0.06}s">
+        <div class="rank-badge">${rank}</div>
+        ${avatarHtml(player)}
+        <div class="player-meta">
+          <div class="player-name">${player.name}</div>
+          ${tags ? `<div class="player-tags">${tags}</div>` : ''}
+        </div>
+        <div class="player-sports">
+          <div class="sport-pip"><div class="sport-pip-label">🎱</div><div class="sport-pip-val">${fmtPts(row.pool||0)}</div></div>
+          <div class="sport-pip"><div class="sport-pip-label">🎳</div><div class="sport-pip-val">${fmtPts(row.bowling||0)}</div></div>
+          <div class="sport-pip"><div class="sport-pip-label">⛳</div><div class="sport-pip-val">${fmtPts(row.golf||0)}</div></div>
+        </div>
+        <div class="player-pts-block">
+          <div class="pts-num">${fmtPts(row.total||0)}</div>
+          <div class="pts-unit">pts</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderWeekTable(weekRows, allPlayers) {
+  const tbody = document.getElementById('week-tbody');
+  if (!weekRows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No matches this week yet</td></tr>';
+    return;
+  }
+
+  const seen = new Set(weekRows.map(r => r.player_id));
+  const extra = allPlayers
+    .filter(p => !seen.has(p.id))
+    .map(p => ({ player_id: p.id, players: p, total: 0, pool: 0, bowling: 0, golf: 0 }));
+  const all = [...weekRows, ...extra].sort((a,b) => (b.total||0)-(a.total||0));
+  const top = all[0]?.total || 0;
+
+  tbody.innerHTML = all.map((row, i) => {
+    const isTop = row.total === top && top > 0;
+    const player = row.players || { name: '?' };
+    return `<tr class="${isTop ? 'top-row' : ''}">
+      <td class="td-name">${player.name}</td>
+      <td>${fmtPts(row.pool||0)}</td>
+      <td>${fmtPts(row.bowling||0)}</td>
+      <td>${fmtPts(row.golf||0)}</td>
+      <td class="td-pts">${fmtPts(row.total||0)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRecentMatches(matches) {
+  const el = document.getElementById('recent-matches');
+  if (!matches.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches yet</div></div>';
+    return;
+  }
+  el.innerHTML = matches.slice(0,6).map(m => {
+    const placements = (m.match_placements || []).sort((a,b) => a.position - b.position);
+    const winner = placements[0]?.players?.name || '?';
+    const others = placements.slice(1).map(p => p.players?.name).filter(Boolean).join(', ');
+    const sport = m.sport || '';
+    return `
+      <div class="match-item">
+        <div class="match-sport-badge ${sport.toLowerCase()}">${SPORT_EMOJI[sport]||'🎯'}</div>
+        <div class="match-info">
+          <div class="match-winner">${winner}</div>
+          <div class="match-detail">${sport}${m.pool_mode?' · '+m.pool_mode:''} ${others?'· vs '+others:''}</div>
+        </div>
+        <div class="match-right">
+          <div class="match-week">Wk ${m.week}</div>
+          <div class="match-date">${fmtDate(m.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderSportLeaders(seasonStandings) {
+  const leaders = { pool: null, bowling: null, golf: null };
+  seasonStandings.forEach(row => {
+    const name = row.players?.name;
+    if (!name) return;
+    ['pool','bowling','golf'].forEach(s => {
+      const pts = parseFloat(row[s]||0);
+      if (!leaders[s] || pts > leaders[s].pts) leaders[s] = { name, pts };
+    });
+  });
+
+  ['pool','bowling','golf'].forEach(s => {
+    const l = leaders[s];
+    document.getElementById(`${s}-leader`).textContent = l?.name || '—';
+    document.getElementById(`${s}-pts`).textContent    = l ? fmtPts(l.pts)+' pts' : '0 pts';
+  });
+}
+
+async function loadDashboard() {
+  try {
+    const [cfg, season, players] = await Promise.all([
+      DB.getConfig(),
+      DB.getActiveSeason(),
+      DB.getPlayers(),
+    ]);
+
+    const [seasonStandings, weekStandings, recentMatches] = await Promise.all([
+      DB.getSeasonStandings(season.id),
+      DB.getWeekStandings(season.id, cfg.currentWeek),
+      DB.getRecentMatches(season.id, 8),
+    ]);
+
+    // Hero
+    document.getElementById('hero-week').textContent = cfg.currentWeek;
+    document.getElementById('hero-king').textContent = cfg.currentKing || 'TBD';
+    document.getElementById('hero-dog').textContent  = cfg.currentUnderdog || 'TBD';
+
+    // King
+    renderKing(cfg.currentKing, seasonStandings, cfg);
+
+    // Sport leaders
+    renderSportLeaders(seasonStandings);
+
+    // Prize
+    const prizeKingEl = document.getElementById('prize-king');
+    prizeKingEl.textContent = cfg.monthlyKing || 'TBD — season in progress';
+    document.getElementById('prize-desc').textContent = season.monthly_reward || 'Free meal for the monthly king';
+
+    // Leaderboard
+    renderLeaderboard(seasonStandings, players, cfg);
+
+    // Week
+    renderWeekTable(weekStandings, players);
+
+    // Recent
+    renderRecentMatches(recentMatches);
+
+    // Show page
+    document.getElementById('loader').classList.add('hidden');
+    const main = document.getElementById('main');
+    main.style.opacity = '1';
+    main.style.transition = 'opacity 0.4s ease';
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('loader').innerHTML =
+      `<div style="text-align:center;padding:40px">
+        <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+        <div style="font-weight:600;margin-bottom:8px">Could not load dashboard</div>
+        <div style="font-size:13px;color:var(--muted)">${err.message}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px">Check your Supabase credentials in js/config.js</div>
+      </div>`;
+  }
+}
+
+loadDashboard();
+</script>
+</body>
+</html>
