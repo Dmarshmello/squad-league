@@ -5,8 +5,15 @@
 const SUPABASE_URL  = 'https://aotztjkfsrhproewrtue.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvdHp0amtmc3JocHJvZXdydHVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MjMwODEsImV4cCI6MjA4OTM5OTA4MX0.VdnJY5_dnHsx4VtGewe3o_WOO_WMlHWfikdH0ezqfIY';
 
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+// Initialise lazily — ensures CDN is ready before createClient is called
+let _dbInstance = null;
+function getDb() {
+  if (!_dbInstance) {
+    _dbInstance = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  }
+  return _dbInstance;
+}
+const db = new Proxy({}, { get(_, prop) { return getDb()[prop]; } });
 
 const SPORTS      = ['Pool', 'Bowling', 'Golf'];
 const POOL_MODES  = ['Singles', '2v1', '2v2'];
