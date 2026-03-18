@@ -116,12 +116,24 @@ const Engine = {
       });
 
     } else if (poolMode === '2v1') {
-      // Each placement has an isWinner boolean stored on it
-      // solo player vs team of 2 — isWinner tells us which side won
-      placements.forEach(p => {
-        if (p.isWinner) winnerGroup.push(p.player_id);
-        else            loserGroup.push(p.player_id);
-      });
+      // Each placement has isWinner explicitly set from the form submission
+      // is_winner=true  → this player is on the winning side
+      // is_winner=false → this player is on the losing side
+      // Always use isWinner flag — never fall back to position for 2v1
+      const hasWinnerFlag = placements.some(p => p.isWinner === true || p.is_winner === true);
+      if (hasWinnerFlag) {
+        placements.forEach(p => {
+          const won = p.isWinner === true || p.is_winner === true;
+          if (won) winnerGroup.push(p.player_id);
+          else     loserGroup.push(p.player_id);
+        });
+      } else {
+        // Legacy fallback: position 1 solo wins, positions 2&3 are team losers
+        placements.forEach(p => {
+          if (p.position === 1) winnerGroup.push(p.player_id);
+          else                  loserGroup.push(p.player_id);
+        });
+      }
 
     } else {
       // Fallback: first placement wins, rest lose
