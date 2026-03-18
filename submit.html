@@ -375,35 +375,13 @@ async function submitMatch() {
       isWinner:  p.isWinner !== undefined ? p.isWinner : null,
     })));
 
-    if (isPast) {
-      // Full recalc from this week
-      btn.textContent = 'Recalculating points...';
-      const allMatches = await DB.getAllMatchesOrdered(season.id);
-      await Engine.fullRecalc(season.id, matchWeek, allMatches, players, cfg);
-      showSuccess(null, true);
-    } else {
-      // Normal single-match point calc
-      const rankMap     = Engine.buildRankMap(seasonStandings, players);
-      const underdogIds = Engine.getUnderdogIds(seasonStandings, players);
-      const cfgWithKing = { ...cfg };
-      const kingPlayer  = players.find(p => p.name === cfg.currentKing);
-      cfgWithKing._kingId = kingPlayer?.id || null;
-
-      const processedSoFar = [];
-      const pts = Engine.calcMatch(
-        { ...match, match_placements: placements.map(p => ({ player_id: p.playerId, position: p.position, is_winner: p.isWinner !== undefined ? p.isWinner : null })) },
-        cfgWithKing, rankMap, underdogIds, processedSoFar, allPlayerIds
-      );
-
-      for (const [playerId, delta] of Object.entries(pts)) {
-        const total = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
-        if (total !== 0 || delta.wins > 0) {
-          await DB.upsertWeekPoints(season.id, matchWeek, playerId, delta);
-          await DB.upsertSeasonPoints(season.id, playerId, delta);
-        }
-      }
-      showSuccess(pts, false);
-    }
+    // Always do a full recalc — ensures anti-farm, rank, and underdog
+    // are calculated correctly against ALL existing matches, not just stale state
+    btn.textContent = isPast ? 'Recalculating points...' : 'Calculating points...';
+    const allMatchesOrdered = await DB.getAllMatchesOrdered(season.id);
+    const freshCfg = await DB.getConfig();
+    await Engine.fullRecalc(season.id, 1, allMatchesOrdered, players, freshCfg);
+    showSuccess(null, isPast);
   } catch (err) {
     console.error(err);
     showToast('Error: ' + err.message, 'error');

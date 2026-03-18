@@ -294,6 +294,11 @@ async function init() {
   }
 }
 init();
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') init();
+});
+window.addEventListener('focus', init);
 </script>
 
 
