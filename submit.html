@@ -215,22 +215,25 @@ function buildPlacementUI() {
 
   if (sport === 'Pool') {
     if (mode === 'Singles') {
-      slots = [{ label: 'Winner', pos: 1 }, { label: 'Loser', pos: 2 }];
+      slots = [{ label: 'Winner', pos: 1, isWinner: true }, { label: 'Loser', pos: 2, isWinner: false }];
     } else if (mode === '2v2') {
       slots = [
-        { label: 'Winner 1', pos: 1 }, { label: 'Winner 2', pos: 2 },
-        { label: 'Loser 1',  pos: 3 }, { label: 'Loser 2',  pos: 4 },
+        { label: 'Winner 1', pos: 1, isWinner: true  },
+        { label: 'Winner 2', pos: 2, isWinner: true  },
+        { label: 'Loser 1',  pos: 3, isWinner: false },
+        { label: 'Loser 2',  pos: 4, isWinner: false },
       ];
     } else if (mode === '2v1') {
+      // 2v1 has 3 players total: the solo player vs the team of 2
+      // We show 3 selects and a toggle for who won
       slots = [
-        { label: 'Winner 1',              pos: 1 },
-        { label: 'Winner 2 (if 2 winners)', pos: 2, optional: true },
-        { label: 'Loser 1',               pos: 3 },
-        { label: 'Loser 2 (if 2 losers)', pos: 4, optional: true },
+        { label: 'Solo Player',   pos: 1, isWinner: null, role: 'solo'  },
+        { label: 'Team Player 1', pos: 2, isWinner: null, role: 'team'  },
+        { label: 'Team Player 2', pos: 3, isWinner: null, role: 'team'  },
       ];
     }
     document.getElementById('step2-title').textContent = `Pool — ${mode}`;
-    document.getElementById('step2-sub').textContent   = 'Select winners and losers';
+    document.getElementById('step2-sub').textContent   = mode === '2v1' ? 'Select the 3 players, then pick who won' : 'Select winners and losers';
   } else {
     const ordinals = ['1st','2nd','3rd','4th','5th','6th'];
     const max = Math.min(state.players.length, 6);
@@ -244,39 +247,85 @@ function buildPlacementUI() {
   const opts = `<option value="">— select —</option>` +
     state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
-  list.innerHTML = slots.map(slot => `
-    <div class="placement-row">
-      <div class="placement-pos ${slot.pos <= 2 ? 'pos-'+slot.pos : ''}">${slot.pos}</div>
-      <div class="placement-label">${slot.label}</div>
-      <select class="placement-select"
-        data-pos="${slot.pos}"
-        data-optional="${slot.optional || false}">
-        ${slot.optional ? '<option value="">— optional —</option>' : ''}
-        ${slot.optional ? state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('') : opts}
-      </select>
-    </div>`).join('');
+  if (mode === '2v1') {
+    // Special 2v1 UI: 3 player selects + a winner toggle
+    list.innerHTML = `
+      <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:12px">
+        <b>2v1 format:</b> 1 solo player vs a team of 2. Select all 3 players then pick who won.
+      </div>
+      ${slots.map(slot => `
+        <div class="placement-row">
+          <div class="placement-pos" style="background:${slot.role==='solo'?'rgba(0,229,176,0.15)':'rgba(99,102,241,0.1)'};color:${slot.role==='solo'?'var(--accent-dark)':'var(--accent2)'};border-color:${slot.role==='solo'?'rgba(0,229,176,0.3)':'rgba(99,102,241,0.2)'}">
+            ${slot.role === 'solo' ? '1' : slot.pos === 2 ? '2' : '3'}
+          </div>
+          <div class="placement-label">${slot.label}</div>
+          <select class="placement-select" data-pos="${slot.pos}" data-role="${slot.role}" data-optional="false">
+            <option value="">— select —</option>
+            ${state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+          </select>
+        </div>`).join('')}
+      <div class="placement-row" style="margin-top:4px">
+        <div class="placement-pos" style="font-size:10px">WIN</div>
+        <div class="placement-label">Who won?</div>
+        <select class="placement-select" id="winner-toggle" data-pos="0" data-optional="false">
+          <option value="">— select —</option>
+          <option value="solo">Solo player won</option>
+          <option value="team">Team of 2 won</option>
+        </select>
+      </div>`;
+  } else {
+    list.innerHTML = slots.map(slot => `
+      <div class="placement-row">
+        <div class="placement-pos ${slot.pos <= 2 ? 'pos-'+slot.pos : ''}">${slot.pos}</div>
+        <div class="placement-label">${slot.label}</div>
+        <select class="placement-select"
+          data-pos="${slot.pos}"
+          data-winner="${slot.isWinner}"
+          data-optional="false">
+          <option value="">— select —</option>
+          ${state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  }
 
   list.querySelectorAll('.placement-select').forEach(s => s.addEventListener('change', validateStep2));
   validateStep2();
 }
 
 function validateStep2() {
-  const selects  = [...document.querySelectorAll('#placement-list .placement-select')];
-  const required = selects.filter(s => s.dataset.optional !== 'true');
+  const selects   = [...document.querySelectorAll('#placement-list .placement-select')];
+  const required  = selects.filter(s => s.dataset.optional !== 'true');
   const allFilled = required.every(s => s.value);
-  const vals   = selects.map(s => s.value).filter(Boolean);
-  const unique = new Set(vals).size === vals.length;
+  // For duplicate check, exclude the winner-toggle select (pos=0)
+  const playerVals = selects.filter(s => s.dataset.pos !== '0').map(s => s.value).filter(Boolean);
+  const unique = new Set(playerVals).size === playerVals.length;
   document.getElementById('step2-next').disabled = !allFilled || !unique;
 }
 
 document.getElementById('step2-back').addEventListener('click', () => goStep(1));
 document.getElementById('step2-next').addEventListener('click', () => {
   const selects = [...document.querySelectorAll('#placement-list .placement-select')];
-  state.placements = selects.filter(s => s.value).map(s => ({
-    playerId:   s.value,
-    playerName: state.players.find(p => p.id === s.value)?.name || '?',
-    position:   parseInt(s.dataset.pos),
-  }));
+
+  if (state.poolMode === '2v1') {
+    const winnerToggle = document.getElementById('winner-toggle')?.value; // 'solo' or 'team'
+    const soloSelect   = selects.find(s => s.dataset.role === 'solo');
+    const teamSelects  = selects.filter(s => s.dataset.role === 'team');
+
+    const soloWins = winnerToggle === 'solo';
+    state.placements = [
+      { playerId: soloSelect.value,      playerName: state.players.find(p=>p.id===soloSelect.value)?.name||'?',       position: 1, isWinner: soloWins  },
+      { playerId: teamSelects[0].value,  playerName: state.players.find(p=>p.id===teamSelects[0].value)?.name||'?',   position: 2, isWinner: !soloWins },
+      { playerId: teamSelects[1].value,  playerName: state.players.find(p=>p.id===teamSelects[1].value)?.name||'?',   position: 3, isWinner: !soloWins },
+    ];
+  } else {
+    const selects2 = [...document.querySelectorAll('#placement-list .placement-select')];
+    state.placements = selects2.filter(s => s.value && s.dataset.pos !== '0').map(s => ({
+      playerId:   s.value,
+      playerName: state.players.find(p => p.id === s.value)?.name || '?',
+      position:   parseInt(s.dataset.pos),
+      isWinner:   s.dataset.winner === 'true',
+    }));
+  }
   buildConfirmUI();
   goStep(3);
 });
@@ -416,5 +465,15 @@ async function init() {
 }
 init();
 </script>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="nav-mobile-links">
+  <a class="nav-mobile-link " href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link " href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link " href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link " href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link submit-mob" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+</nav>
+
 </body>
 </html>

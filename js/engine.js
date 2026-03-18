@@ -79,7 +79,14 @@ const Engine = {
 
     const sport    = match.sport;
     const poolMode = match.pool_mode;
-    const placements = (match.match_placements || []).sort((a, b) => a.position - b.position);
+    // Map is_winner from DB field onto placements
+    const placements = (match.match_placements || [])
+      .sort((a, b) => a.position - b.position)
+      .map(p => ({
+        ...p,
+        player_id: p.player_id,
+        isWinner: p.is_winner !== undefined && p.is_winner !== null ? p.is_winner : (p.isWinner !== undefined ? p.isWinner : null),
+      }));
     const kingId   = allPlayerIds.find ? undefined : null; // resolved below
 
     if (sport === 'Pool') {
@@ -94,40 +101,45 @@ const Engine = {
     let winnerGroup = [];
     let loserGroup  = [];
 
-    const byPos = {};
-    placements.forEach(p => { byPos[p.position] = p.player_id; });
-
     if (poolMode === 'Singles') {
-      if (byPos[1]) winnerGroup.push(byPos[1]);
-      if (byPos[2]) loserGroup.push(byPos[2]);
+      // position 1 = winner, position 2 = loser
+      placements.forEach(p => {
+        if (p.position === 1) winnerGroup.push(p.player_id);
+        else                  loserGroup.push(p.player_id);
+      });
+
     } else if (poolMode === '2v2') {
-      if (byPos[1]) winnerGroup.push(byPos[1]);
-      if (byPos[2]) winnerGroup.push(byPos[2]);
-      if (byPos[3]) loserGroup.push(byPos[3]);
-      if (byPos[4]) loserGroup.push(byPos[4]);
+      // positions 1,2 = winners; positions 3,4 = losers
+      placements.forEach(p => {
+        if (p.position <= 2) winnerGroup.push(p.player_id);
+        else                 loserGroup.push(p.player_id);
+      });
+
     } else if (poolMode === '2v1') {
-      if (byPos[1]) winnerGroup.push(byPos[1]);
-      // position 2 is optional second winner
-      const p2isWinner = match._p2isWinner;
-      if (byPos[2] && p2isWinner) {
-        winnerGroup.push(byPos[2]);
-        if (byPos[3]) loserGroup.push(byPos[3]);
-        if (byPos[4]) loserGroup.push(byPos[4]);
-      } else {
-        if (byPos[2]) loserGroup.push(byPos[2]);
-        if (byPos[3]) loserGroup.push(byPos[3]);
-      }
+      // Each placement has an isWinner boolean stored on it
+      // solo player vs team of 2 — isWinner tells us which side won
+      placements.forEach(p => {
+        if (p.isWinner) winnerGroup.push(p.player_id);
+        else            loserGroup.push(p.player_id);
+      });
+
     } else {
-      // default singles fallback
-      if (byPos[1]) winnerGroup.push(byPos[1]);
-      placements.slice(1).forEach(p => loserGroup.push(p.player_id));
+      // Fallback: first placement wins, rest lose
+      placements.forEach((p, i) => {
+        if (i === 0) winnerGroup.push(p.player_id);
+        else         loserGroup.push(p.player_id);
+      });
     }
 
     winnerGroup = winnerGroup.filter(Boolean);
     loserGroup  = loserGroup.filter(Boolean);
     if (!winnerGroup.length || !loserGroup.length) return;
 
-    const winsThisWeek = DB.countWinsVsSideInMemory(processedSoFar, match.week, 'Pool', winnerGroup, loserGroup);
+    // Anti-farm: normalise the matchup as a sorted pair of sides
+    // so p1 vs {p2,p3} and {p2,p3} vs p1 are treated as the same pairing
+    const winsThisWeek = DB.countWinsVsSideInMemory(
+      processedSoFar, match.week, 'Pool', winnerGroup, loserGroup
+    );
     const reduce = this.shouldReduceForFarm(winsThisWeek, cfg.maxFullWins, winnerGroup, loserGroup, rankMap);
     const base   = reduce ? cfg.reducedPts : cfg.poolWinPts;
 

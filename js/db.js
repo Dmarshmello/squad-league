@@ -79,7 +79,7 @@ const DB = {
   async getAllMatchesOrdered(seasonId) {
     const { data, error } = await db.from('matches')
       .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
-        match_placements(position, player_id, players(id,name,photo_url))`)
+        match_placements(position, player_id, is_winner, players(id,name,photo_url))`)
       .eq('season_id', seasonId)
       .order('match_date', { ascending: true })
       .order('created_at', { ascending: true });
@@ -90,7 +90,7 @@ const DB = {
   async getAllMatchesDesc(seasonId) {
     const { data, error } = await db.from('matches')
       .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
-        match_placements(position, player_id, players(id,name,photo_url))`)
+        match_placements(position, player_id, is_winner, players(id,name,photo_url))`)
       .eq('season_id', seasonId)
       .order('match_date', { ascending: false })
       .order('created_at', { ascending: false });
@@ -101,7 +101,7 @@ const DB = {
   async getRecentMatches(seasonId, limit = 10) {
     const { data, error } = await db.from('matches')
       .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
-        match_placements(position, player_id, players(id,name,photo_url))`)
+        match_placements(position, player_id, is_winner, players(id,name,photo_url))`)
       .eq('season_id', seasonId).eq('deleted', false)
       .order('match_date', { ascending: false })
       .order('created_at', { ascending: false })
@@ -120,7 +120,12 @@ const DB = {
 
   async insertPlacements(matchId, placements) {
     const { error } = await db.from('match_placements').insert(
-      placements.map(p => ({ match_id: matchId, player_id: p.playerId, position: p.position }))
+      placements.map(p => ({
+        match_id:  matchId,
+        player_id: p.playerId,
+        position:  p.position,
+        is_winner: p.isWinner !== undefined ? p.isWinner : null,
+      }))
     );
     if (error) throw error;
   },
@@ -192,18 +197,42 @@ const DB = {
   },
 
   // Count wins this week between same sides (for anti-farm) — uses in-memory data during recalc
+  // For 2v1: matches the PAIRING of players regardless of which side won
+  // so {p1} vs {p2,p3} and {p2,p3} vs {p1} count toward the same anti-farm total
   countWinsVsSideInMemory(processedMatches, week, sport, winnerIds, loserIds) {
-    const winnerSet = new Set(winnerIds);
-    const loserSet  = new Set(loserIds);
+    const winnerSet  = new Set(winnerIds);
+    const loserSet   = new Set(loserIds);
+    // The full set of players involved in this matchup
+    const allInvolved = new Set([...winnerIds, ...loserIds]);
     let count = 0;
+
     for (const m of processedMatches) {
       if (m.week !== week || m.sport !== sport || m.deleted) continue;
       const pl = m.match_placements || [];
-      const mWinners = pl.filter(p => p.position <= winnerIds.length).map(p => p.player_id);
-      const mLosers  = pl.filter(p => p.position > winnerIds.length).map(p => p.player_id);
-      if (mWinners.length === winnerIds.length && mWinners.every(id => winnerSet.has(id)) &&
-          mLosers.length  === loserIds.length  && mLosers.every(id => loserSet.has(id))) {
+      const matchPlayerIds = pl.map(p => p.player_id).filter(Boolean);
+
+      // Check the same group of players was involved (regardless of who won)
+      if (matchPlayerIds.length !== allInvolved.size) continue;
+      const sameGroup = matchPlayerIds.every(id => allInvolved.has(id));
+      if (!sameGroup) continue;
+
+      // For 2v1: any win between this group of 3 counts toward the pairing total
+      // For Singles/2v2: must be the exact same winner vs loser matchup
+      if (m.pool_mode === '2v1') {
+        // Count any match between these 3 players as the same pairing
         count++;
+      } else {
+        // Singles / 2v2: must be same winner group beating same loser group
+        const mWinners = pl.filter(p => p.isWinner).map(p => p.player_id);
+        const mLosers  = pl.filter(p => !p.isWinner).map(p => p.player_id);
+        // Fallback to position if isWinner not set
+        const wGroup = mWinners.length ? mWinners : pl.filter(p => p.position <= winnerIds.length).map(p => p.player_id);
+        const lGroup = mLosers.length  ? mLosers  : pl.filter(p => p.position > winnerIds.length).map(p => p.player_id);
+        const wSet = new Set(wGroup);
+        const lSet = new Set(lGroup);
+        if (winnerIds.every(id => wSet.has(id)) && loserIds.every(id => lSet.has(id))) {
+          count++;
+        }
       }
     }
     return count;
