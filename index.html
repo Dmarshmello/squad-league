@@ -283,13 +283,6 @@ async function loadDashboard() {
   }
 }
 loadDashboard();
-
-// Refresh data whenever user comes back to this tab
-// (e.g. after submitting a match in another tab)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') loadDashboard();
-});
-window.addEventListener('focus', loadDashboard);
 </script>
 
 
