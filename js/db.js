@@ -154,86 +154,62 @@ const DB = {
   },
 
   async upsertWeekPoints(seasonId, week, playerId, delta) {
-    // Fetch current row first so we can accumulate correctly
-    let ex = null;
-    try {
-      const { data } = await db.from('week_points')
-        .select('*')
-        .eq('season_id', seasonId)
-        .eq('week', week)
-        .eq('player_id', playerId)
-        .maybeSingle();
-      ex = data;
-    } catch(_) { ex = null; }
+    // Use Supabase native upsert with onConflict — no fetch needed
+    // First get current values to accumulate on top of
+    const { data: rows } = await db.from('week_points')
+      .select('pool,bowling,golf,bonus,underdog,wins,pool_wins,bowling_wins,golf_wins')
+      .eq('season_id', seasonId)
+      .eq('week', week)
+      .eq('player_id', playerId)
+      .limit(1);
 
-    const pool     = round2((ex?.pool     || 0) + (delta.pool     || 0));
-    const bowling  = round2((ex?.bowling  || 0) + (delta.bowling  || 0));
-    const golf     = round2((ex?.golf     || 0) + (delta.golf     || 0));
-    const bonus    = round2((ex?.bonus    || 0) + (delta.bonus    || 0));
-    const underdog = round2((ex?.underdog || 0) + (delta.underdog || 0));
-    const wins     = (ex?.wins        || 0) + (delta.wins        || 0);
-    const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
-    const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
-    const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
-    const total    = round2(pool + bowling + golf + bonus + underdog);
+    const ex = (rows && rows.length > 0) ? rows[0] : null;
 
-    const row = {
-      season_id: seasonId, week, player_id: playerId,
-      pool, bowling, golf, bonus, underdog, total,
-      wins, pool_wins, bowling_wins, golf_wins
-    };
-
-    if (ex) {
-      const { error } = await db.from('week_points')
-        .update(row)
-        .eq('season_id', seasonId)
-        .eq('week', week)
-        .eq('player_id', playerId);
-      if (error) throw error;
-    } else {
-      const { error } = await db.from('week_points').insert(row);
-      if (error) throw error;
-    }
-  },
-
-  async upsertSeasonPoints(seasonId, playerId, delta) {
-    let ex = null;
-    try {
-      const { data } = await db.from('season_points')
-        .select('*')
-        .eq('season_id', seasonId)
-        .eq('player_id', playerId)
-        .maybeSingle();
-      ex = data;
-    } catch(_) { ex = null; }
-
-    const pool     = round2((ex?.pool     || 0) + (delta.pool     || 0));
-    const bowling  = round2((ex?.bowling  || 0) + (delta.bowling  || 0));
-    const golf     = round2((ex?.golf     || 0) + (delta.golf     || 0));
-    const bonus    = round2((ex?.bonus    || 0) + (delta.bonus    || 0));
-    const underdog = round2((ex?.underdog || 0) + (delta.underdog || 0));
+    const pool         = round2((ex?.pool         || 0) + (delta.pool         || 0));
+    const bowling      = round2((ex?.bowling      || 0) + (delta.bowling      || 0));
+    const golf         = round2((ex?.golf         || 0) + (delta.golf         || 0));
+    const bonus        = round2((ex?.bonus        || 0) + (delta.bonus        || 0));
+    const underdog     = round2((ex?.underdog     || 0) + (delta.underdog     || 0));
     const wins         = (ex?.wins         || 0) + (delta.wins         || 0);
     const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
     const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
     const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
-    const total    = round2(pool + bowling + golf + bonus + underdog);
+    const total        = round2(pool + bowling + golf + bonus + underdog);
 
-    const row = {
+    const { error } = await db.from('week_points').upsert({
+      season_id: seasonId, week, player_id: playerId,
+      pool, bowling, golf, bonus, underdog, total,
+      wins, pool_wins, bowling_wins, golf_wins
+    }, { onConflict: 'season_id,week,player_id' });
+    if (error) throw error;
+  },
+
+  async upsertSeasonPoints(seasonId, playerId, delta) {
+    const { data: rows } = await db.from('season_points')
+      .select('pool,bowling,golf,bonus,underdog,wins,pool_wins,bowling_wins,golf_wins')
+      .eq('season_id', seasonId)
+      .eq('player_id', playerId)
+      .limit(1);
+
+    const ex = (rows && rows.length > 0) ? rows[0] : null;
+
+    const pool         = round2((ex?.pool         || 0) + (delta.pool         || 0));
+    const bowling      = round2((ex?.bowling      || 0) + (delta.bowling      || 0));
+    const golf         = round2((ex?.golf         || 0) + (delta.golf         || 0));
+    const bonus        = round2((ex?.bonus        || 0) + (delta.bonus        || 0));
+    const underdog     = round2((ex?.underdog     || 0) + (delta.underdog     || 0));
+    const wins         = (ex?.wins         || 0) + (delta.wins         || 0);
+    const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
+    const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
+    const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
+    const total        = round2(pool + bowling + golf + bonus + underdog);
+
+    const { error } = await db.from('season_points').upsert({
       season_id: seasonId, player_id: playerId,
       pool, bowling, golf, bonus, underdog, total,
       wins, pool_wins, bowling_wins, golf_wins
-    };
-
-    if (ex) {
-      const { error } = await db.from('season_points')
-        .update(row)
-        .eq('season_id', seasonId)
-        .eq('player_id', playerId);
-      if (error) throw error;
-    } else {
-      const { error } = await db.from('season_points').insert(row);
-      if (error) throw error;
-    }
+    }, { onConflict: 'season_id,player_id' });
+    if (error) throw error;
   },
 
   // Count wins this week between same sides (for anti-farm) — uses in-memory data during recalc
