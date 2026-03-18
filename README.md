@@ -1,4 +1,4 @@
-# 🏆 Squad League — Shooting Blanks S2
+# 🏆 Squad League — Shooting Blanks
 
 A multi-sport competition tracker for a group of friends. Tracks Pool, Bowling, and Golf with a full points engine including upset bonuses, underdog multipliers, anti-farm rules, and a King of the Week system.
 
