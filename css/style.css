@@ -50,6 +50,7 @@ body {
   color: var(--text);
   min-height: 100dvh;
   overflow-x: hidden;
+  max-width: 100vw;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -167,17 +168,20 @@ body::before {
 .page {
   position: relative;
   z-index: 1;
-  padding-top: calc(var(--nav-h) + 32px);
+  padding-top: calc(var(--nav-h) + 24px);
   padding-bottom: 80px;
   max-width: 1100px;
   margin: 0 auto;
   padding-left: 24px;
   padding-right: 24px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 /* ── LOADING ─────────────────────────────────────────────────── */
 .loading-screen {
   position: fixed; inset: 0;
+  width: 100%; height: 100%;
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -185,15 +189,18 @@ body::before {
   justify-content: center;
   gap: 20px;
   z-index: 999;
+  overflow: hidden;
   transition: opacity 0.4s, visibility 0.4s;
 }
 .loading-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
 .loading-logo {
   font-family: var(--font-display);
-  font-size: 52px;
+  font-size: clamp(32px, 12vw, 52px);
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--text);
+  text-align: center;
+  padding: 0 20px;
 }
 .loading-logo span { color: var(--accent-dark); }
 .loading-bar { width: 120px; height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; }
@@ -282,7 +289,7 @@ body::before {
 }
 .hero-title {
   font-family: var(--font-display);
-  font-size: clamp(48px, 8vw, 80px);
+  font-size: clamp(36px, 10vw, 80px);
   font-weight: 700;
   line-height: 0.92;
   letter-spacing: -0.02em;
@@ -472,7 +479,8 @@ body::before {
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
 /* ── WEEK TABLE ──────────────────────────────────────────────── */
-.week-table { width: 100%; border-collapse: collapse; }
+.week-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.week-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .week-table th {
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.08em;
@@ -945,29 +953,104 @@ body::before {
 
 /* ── RESPONSIVE ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Hide desktop nav links, show mobile bottom bar */
+  :root { --nav-h: 56px; }
+
+  /* Nav */
   .nav-links  { display: none; }
   .nav-submit { display: none; }
   .nav-mobile-links { display: flex; }
+  .nav { padding: 0 16px; gap: 12px; }
+  .nav-logo { font-size: 15px; }
 
-  .page { padding-left: 16px; padding-right: 16px; padding-bottom: 90px; }
-  .hero { grid-template-columns: 1fr; }
-  .two-col { grid-template-columns: 1fr; }
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  /* Page */
+  .page {
+    padding-top: calc(var(--nav-h) + 16px);
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: 100px;
+  }
+
+  /* Hero */
+  .hero { grid-template-columns: 1fr; gap: 0; margin-bottom: 24px; }
+  .hero-title { font-size: clamp(32px, 11vw, 56px); }
+  .hero-eyebrow { margin-bottom: 10px; }
+  .hero-pills { gap: 6px; margin-top: 12px; }
+  .pill { font-size: 11px; padding: 5px 10px; }
+
+  /* King card */
+  .king-card { padding: 20px; margin-bottom: 24px; }
+  .king-name  { font-size: 28px; }
+  .king-avatar { width: 60px; height: 60px; font-size: 22px; }
+
+  /* Layout */
+  .two-col    { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .player-sports { display: none; }
-  .form-card { padding: 24px 20px; }
-  .prize-banner { flex-direction: column; text-align: center; }
+
+  /* Leaderboard */
+  .player-row { padding: 12px 14px; gap: 10px; }
+  .rank-badge { width: 30px; height: 30px; font-size: 15px; }
+  .player-avatar { width: 40px; height: 40px; font-size: 13px; }
+  .player-name { font-size: 14px; }
+  .pts-num { font-size: 26px; }
+
+  /* Prize banner */
+  .prize-banner { flex-direction: column; text-align: center; padding: 20px; }
+  .prize-name { font-size: 22px; }
+
+  /* Week table — scrollable */
+  .card-solid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .week-table { min-width: 320px; font-size: 12px; }
+  .week-table th, .week-table td { padding: 8px 8px; }
+
+  /* Match items */
+  .match-item { padding: 12px 12px; gap: 10px; }
+  .match-detail { font-size: 11px; }
+
+  /* Forms */
+  .form-card { padding: 20px 16px; border-radius: var(--radius-lg); }
+  .form-title { font-size: 22px; }
+  .form-wrap { max-width: 100%; }
+  .sport-picker { gap: 8px; }
+  .sport-option { padding: 14px 8px; }
+  .sport-option-icon { font-size: 26px; }
+  .sport-option-name { font-size: 11px; }
+  .mode-picker { gap: 8px; }
+  .placement-label { width: 60px; font-size: 11px; }
+  .placement-select { font-size: 13px; }
+  .btn { padding: 12px 20px; font-size: 14px; }
+
+  /* Breakdown */
+  .player-tab { padding: 6px 12px; font-size: 12px; }
+  .breakdown-header { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .breakdown-stat { padding: 12px; }
+  .breakdown-stat-val { font-size: 22px; }
+
+  /* Settings */
+  .settings-section { padding: 20px 16px; }
   .settings-grid { grid-template-columns: 1fr; }
   .rules-grid { grid-template-columns: 1fr; }
-  .reset-btn-area { flex-direction: column; align-items: flex-start; }
-  .player-profile-grid { grid-template-columns: repeat(3, 1fr); }
+  .reset-btn-area { flex-direction: column; align-items: flex-start; padding: 20px; }
+  .player-profile-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  /* Modal */
+  .modal { padding: 24px 18px; margin: 0 8px; }
+  .modal-title { font-size: 22px; }
+
+  /* Section labels */
+  .section-label { font-size: 10px; }
+  .page-title { font-size: clamp(28px, 8vw, 48px); }
+  .page-subtitle { font-size: 13px; margin-bottom: 24px; }
 }
 
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
-  .sport-picker { gap: 8px; }
   .breakdown-header { grid-template-columns: repeat(3, 1fr); }
   .player-profile-grid { grid-template-columns: repeat(2, 1fr); }
+  .hero-pills { gap: 5px; }
+  .pill { font-size: 10px; padding: 4px 8px; }
+  .king-content { gap: 12px; }
+  .king-name { font-size: 24px; }
 }
 
 /* ── SITE FOOTER ─────────────────────────────────────────────── */
