@@ -4,39 +4,41 @@
 
 const DB = {
 
+  // ── CONFIG ───────────────────────────────────────────────
   async getConfig() {
     const { data, error } = await db.from('config').select('key,value');
     if (error) throw error;
-    const cfg = {};
-    data.forEach(r => { cfg[r.key] = r.value; });
-    // parse underdog as array
-    const underdogRaw = cfg.current_underdog || '';
-    const underdogs = underdogRaw ? underdogRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const c = {};
+    (data || []).forEach(r => { c[r.key] = r.value; });
+    const underdogRaw = c.current_underdog || '';
     return {
-      currentWeek:        parseInt(cfg.current_week)         || 1,
-      currentKing:        cfg.current_king                   || '',
-      currentUnderdogs:   underdogs,
-      monthlyKing:        cfg.monthly_king                   || '',
-      seasonStart:        cfg.season_start                   || '',
-      seasonEnd:          cfg.season_end                     || '',
-      poolWinPts:         parseFloat(cfg.pool_win_pts)       || 3,
-      firstPts:           parseFloat(cfg.first_pts)          || 5,
-      secondPts:          parseFloat(cfg.second_pts)         || 2,
-      maxFullWins:        parseInt(cfg.max_full_wins)        || 2,
-      reducedPts:         parseFloat(cfg.reduced_pts)        || 1,
-      kingSlay:           parseFloat(cfg.king_slay_bonus)    || 3,
-      underdogMultiplier: parseFloat(cfg.underdog_multiplier)|| 1.5,
-      upsetFactor:        parseFloat(cfg.upset_factor)       || 0.2,
+      currentWeek:        parseInt(c.current_week)          || 1,
+      currentKing:        c.current_king                    || '',
+      currentUnderdogs:   underdogRaw ? underdogRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+      monthlyKing:        c.monthly_king                    || '',
+      seasonStart:        c.season_start                    || '',
+      seasonEnd:          c.season_end                      || '',
+      poolWinPts:         parseFloat(c.pool_win_pts)        || 3,
+      firstPts:           parseFloat(c.first_pts)           || 5,
+      secondPts:          parseFloat(c.second_pts)          || 2,
+      maxFullWins:        parseInt(c.max_full_wins)          || 2,
+      reducedPts:         parseFloat(c.reduced_pts)         || 1,
+      kingSlay:           parseFloat(c.king_slay_bonus)     || 3,
+      underdogMultiplier: parseFloat(c.underdog_multiplier) || 1.5,
+      upsetFactor:        parseFloat(c.upset_factor)        || 0.2,
     };
   },
 
   async setConfig(key, value) {
-    const { error } = await db.from('config').upsert({ key, value: String(value) }, { onConflict: 'key' });
+    const { error } = await db.from('config')
+      .upsert({ key, value: String(value) }, { onConflict: 'key' });
     if (error) throw error;
   },
 
+  // ── SEASON ───────────────────────────────────────────────
   async getActiveSeason() {
-    const { data, error } = await db.from('seasons').select('*').eq('is_active', true).single();
+    const { data, error } = await db.from('seasons')
+      .select('*').eq('is_active', true).limit(1).single();
     if (error) throw error;
     return data;
   },
@@ -46,37 +48,42 @@ const DB = {
     if (error) throw error;
   },
 
+  // ── PLAYERS ──────────────────────────────────────────────
   async getPlayers() {
     const { data, error } = await db.from('players').select('*').order('name');
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
   async updatePlayerPhoto(id, photoUrl) {
-    const { error } = await db.from('players').update({ photo_url: photoUrl }).eq('id', id);
+    const { error } = await db.from('players')
+      .update({ photo_url: photoUrl || null }).eq('id', id);
     if (error) throw error;
   },
 
+  // ── STANDINGS ────────────────────────────────────────────
   async getSeasonStandings(seasonId) {
     const { data, error } = await db.from('season_points')
       .select('*, players(id,name,photo_url)')
       .eq('season_id', seasonId)
       .order('total', { ascending: false });
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
   async getWeekStandings(seasonId, week) {
     const { data, error } = await db.from('week_points')
       .select('*, players(id,name,photo_url)')
-      .eq('season_id', seasonId).eq('week', week)
+      .eq('season_id', seasonId)
+      .eq('week', week)
       .order('total', { ascending: false });
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
-  // Returns all matches ordered by match_date asc (for recalc)
-  async getAllMatchesOrdered(seasonId) {
+  // ── MATCHES ──────────────────────────────────────────────
+  // All matches ordered oldest first (for recalc)
+  async getAllMatchesAsc(seasonId) {
     const { data, error } = await db.from('matches')
       .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
         match_placements(position, player_id, is_winner, players(id,name,photo_url))`)
@@ -84,9 +91,10 @@ const DB = {
       .order('match_date', { ascending: true })
       .order('created_at', { ascending: true });
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
+  // All matches newest first (for history page)
   async getAllMatchesDesc(seasonId) {
     const { data, error } = await db.from('matches')
       .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
@@ -95,38 +103,48 @@ const DB = {
       .order('match_date', { ascending: false })
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
-  async getRecentMatches(seasonId, limit = 10) {
+  // Recent non-deleted matches for dashboard
+  async getRecentMatches(seasonId, limit = 8) {
     const { data, error } = await db.from('matches')
-      .select(`id, week, sport, pool_mode, match_date, created_at, notes, deleted,
+      .select(`id, week, sport, pool_mode, match_date, created_at, notes,
         match_placements(position, player_id, is_winner, players(id,name,photo_url))`)
-      .eq('season_id', seasonId).eq('deleted', false)
+      .eq('season_id', seasonId)
+      .eq('deleted', false)
       .order('match_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
-    return data;
+    return data || [];
   },
 
   async insertMatch(seasonId, week, sport, poolMode, notes, matchDate) {
     const { data, error } = await db.from('matches')
-      .insert({ season_id: seasonId, week, sport, pool_mode: poolMode || null, notes: notes || '', match_date: matchDate, deleted: false })
+      .insert({
+        season_id: seasonId,
+        week,
+        sport,
+        pool_mode: poolMode || null,
+        notes: notes || '',
+        match_date: matchDate,
+        deleted: false,
+      })
       .select().single();
     if (error) throw error;
     return data;
   },
 
   async insertPlacements(matchId, placements) {
-    const { error } = await db.from('match_placements').insert(
-      placements.map(p => ({
-        match_id:  matchId,
-        player_id: p.playerId,
-        position:  p.position,
-        is_winner: p.isWinner !== undefined ? p.isWinner : null,
-      }))
-    );
+    // placements: [{ playerId, position, isWinner }]
+    const rows = placements.map(p => ({
+      match_id:  matchId,
+      player_id: p.playerId,
+      position:  p.position,
+      is_winner: typeof p.isWinner === 'boolean' ? p.isWinner : null,
+    }));
+    const { error } = await db.from('match_placements').insert(rows);
     if (error) throw error;
   },
 
@@ -140,137 +158,98 @@ const DB = {
     if (error) throw error;
   },
 
-  // ── POINTS ──────────────────────────────────────────────────
-
+  // ── POINTS — CLEAR ───────────────────────────────────────
   async clearAllPoints(seasonId) {
-    await db.from('season_points').delete().eq('season_id', seasonId);
-    await db.from('week_points').delete().eq('season_id', seasonId);
+    const { error: e1 } = await db.from('week_points').delete().eq('season_id', seasonId);
+    if (e1) throw e1;
+    const { error: e2 } = await db.from('season_points').delete().eq('season_id', seasonId);
+    if (e2) throw e2;
   },
 
-  async clearPointsFromWeek(seasonId, fromWeek) {
-    await db.from('week_points').delete().eq('season_id', seasonId).gte('week', fromWeek);
-    // For season points we clear all and rebuild since they're cumulative
-    await db.from('season_points').delete().eq('season_id', seasonId);
-  },
-
+  // ── POINTS — WRITE ───────────────────────────────────────
+  // These use .select().limit(1) instead of maybeSingle() to avoid proxy issues
   async upsertWeekPoints(seasonId, week, playerId, delta) {
-    // Fetch current row first so we can accumulate correctly
-    let ex = null;
-    try {
-      const { data } = await db.from('week_points')
-        .select('*')
-        .eq('season_id', seasonId)
-        .eq('week', week)
-        .eq('player_id', playerId)
-        .maybeSingle();
-      ex = data;
-    } catch(_) { ex = null; }
+    // Fetch existing row
+    const { data: rows } = await db.from('week_points')
+      .select('pool,bowling,golf,bonus,underdog,wins,pool_wins,bowling_wins,golf_wins')
+      .eq('season_id', seasonId).eq('week', week).eq('player_id', playerId)
+      .limit(1);
 
-    const pool     = round2((ex?.pool     || 0) + (delta.pool     || 0));
-    const bowling  = round2((ex?.bowling  || 0) + (delta.bowling  || 0));
-    const golf     = round2((ex?.golf     || 0) + (delta.golf     || 0));
-    const bonus    = round2((ex?.bonus    || 0) + (delta.bonus    || 0));
-    const underdog = round2((ex?.underdog || 0) + (delta.underdog || 0));
-    const wins     = (ex?.wins        || 0) + (delta.wins        || 0);
-    const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
-    const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
-    const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
-    const total    = round2(pool + bowling + golf + bonus + underdog);
+    const ex = rows && rows.length > 0 ? rows[0] : null;
 
-    const row = {
-      season_id: seasonId, week, player_id: playerId,
-      pool, bowling, golf, bonus, underdog, total,
-      wins, pool_wins, bowling_wins, golf_wins
-    };
-
-    if (ex) {
-      const { error } = await db.from('week_points')
-        .update(row)
-        .eq('season_id', seasonId)
-        .eq('week', week)
-        .eq('player_id', playerId);
-      if (error) throw error;
-    } else {
-      const { error } = await db.from('week_points').insert(row);
-      if (error) throw error;
-    }
-  },
-
-  async upsertSeasonPoints(seasonId, playerId, delta) {
-    let ex = null;
-    try {
-      const { data } = await db.from('season_points')
-        .select('*')
-        .eq('season_id', seasonId)
-        .eq('player_id', playerId)
-        .maybeSingle();
-      ex = data;
-    } catch(_) { ex = null; }
-
-    const pool     = round2((ex?.pool     || 0) + (delta.pool     || 0));
-    const bowling  = round2((ex?.bowling  || 0) + (delta.bowling  || 0));
-    const golf     = round2((ex?.golf     || 0) + (delta.golf     || 0));
-    const bonus    = round2((ex?.bonus    || 0) + (delta.bonus    || 0));
-    const underdog = round2((ex?.underdog || 0) + (delta.underdog || 0));
+    const pool         = round2((ex?.pool         || 0) + (delta.pool         || 0));
+    const bowling      = round2((ex?.bowling      || 0) + (delta.bowling      || 0));
+    const golf         = round2((ex?.golf         || 0) + (delta.golf         || 0));
+    const bonus        = round2((ex?.bonus        || 0) + (delta.bonus        || 0));
+    const underdog     = round2((ex?.underdog     || 0) + (delta.underdog     || 0));
     const wins         = (ex?.wins         || 0) + (delta.wins         || 0);
     const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
     const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
     const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
-    const total    = round2(pool + bowling + golf + bonus + underdog);
+    const total        = round2(pool + bowling + golf + bonus + underdog);
 
-    const row = {
-      season_id: seasonId, player_id: playerId,
-      pool, bowling, golf, bonus, underdog, total,
-      wins, pool_wins, bowling_wins, golf_wins
-    };
-
-    if (ex) {
-      const { error } = await db.from('season_points')
-        .update(row)
-        .eq('season_id', seasonId)
-        .eq('player_id', playerId);
-      if (error) throw error;
-    } else {
-      const { error } = await db.from('season_points').insert(row);
-      if (error) throw error;
-    }
+    const { error } = await db.from('week_points').upsert(
+      { season_id: seasonId, week, player_id: playerId, pool, bowling, golf, bonus, underdog, total, wins, pool_wins, bowling_wins, golf_wins },
+      { onConflict: 'season_id,week,player_id' }
+    );
+    if (error) throw error;
   },
 
-  // Count wins this week between same sides (for anti-farm) — uses in-memory data during recalc
-  // For 2v1: matches the PAIRING of players regardless of which side won
-  // so {p1} vs {p2,p3} and {p2,p3} vs {p1} count toward the same anti-farm total
-  countWinsVsSideInMemory(processedMatches, week, sport, winnerIds, loserIds) {
-    const winnerSet  = new Set(winnerIds);
-    const loserSet   = new Set(loserIds);
-    // The full set of players involved in this matchup
+  async upsertSeasonPoints(seasonId, playerId, delta) {
+    const { data: rows } = await db.from('season_points')
+      .select('pool,bowling,golf,bonus,underdog,wins,pool_wins,bowling_wins,golf_wins')
+      .eq('season_id', seasonId).eq('player_id', playerId)
+      .limit(1);
+
+    const ex = rows && rows.length > 0 ? rows[0] : null;
+
+    const pool         = round2((ex?.pool         || 0) + (delta.pool         || 0));
+    const bowling      = round2((ex?.bowling      || 0) + (delta.bowling      || 0));
+    const golf         = round2((ex?.golf         || 0) + (delta.golf         || 0));
+    const bonus        = round2((ex?.bonus        || 0) + (delta.bonus        || 0));
+    const underdog     = round2((ex?.underdog     || 0) + (delta.underdog     || 0));
+    const wins         = (ex?.wins         || 0) + (delta.wins         || 0);
+    const pool_wins    = (ex?.pool_wins    || 0) + (delta.pool_wins    || 0);
+    const bowling_wins = (ex?.bowling_wins || 0) + (delta.bowling_wins || 0);
+    const golf_wins    = (ex?.golf_wins    || 0) + (delta.golf_wins    || 0);
+    const total        = round2(pool + bowling + golf + bonus + underdog);
+
+    const { error } = await db.from('season_points').upsert(
+      { season_id: seasonId, player_id: playerId, pool, bowling, golf, bonus, underdog, total, wins, pool_wins, bowling_wins, golf_wins },
+      { onConflict: 'season_id,player_id' }
+    );
+    if (error) throw error;
+  },
+
+  // ── ANTI-FARM (in-memory, used during recalc) ────────────
+  // Counts how many times these exact player groups have played
+  // each other this week (regardless of who won — for 2v1 we
+  // track the pairing of all players involved)
+  countWinsInMemory(processedMatches, week, sport, winnerIds, loserIds) {
     const allInvolved = new Set([...winnerIds, ...loserIds]);
     let count = 0;
 
     for (const m of processedMatches) {
       if (m.week !== week || m.sport !== sport || m.deleted) continue;
       const pl = m.match_placements || [];
-      const matchPlayerIds = pl.map(p => p.player_id).filter(Boolean);
+      const matchPIds = pl.map(p => p.player_id).filter(Boolean);
 
-      // Check the same group of players was involved (regardless of who won)
-      if (matchPlayerIds.length !== allInvolved.size) continue;
-      const sameGroup = matchPlayerIds.every(id => allInvolved.has(id));
-      if (!sameGroup) continue;
+      if (matchPIds.length !== allInvolved.size) continue;
+      if (!matchPIds.every(id => allInvolved.has(id))) continue;
 
-      // For 2v1: any win between this group of 3 counts toward the pairing total
-      // For Singles/2v2: must be the exact same winner vs loser matchup
       if (m.pool_mode === '2v1') {
-        // Count any match between these 3 players as the same pairing
+        // Any match between these 3 players counts toward the pairing limit
         count++;
       } else {
-        // Singles / 2v2: must be same winner group beating same loser group
-        const mWinners = pl.filter(p => p.isWinner).map(p => p.player_id);
-        const mLosers  = pl.filter(p => !p.isWinner).map(p => p.player_id);
-        // Fallback to position if isWinner not set
+        // Singles / 2v2: exact winner vs loser match
+        const winSet = new Set(winnerIds);
+        const losSet = new Set(loserIds);
+        const mWinners = pl.filter(p => p.is_winner === true).map(p => p.player_id);
+        const mLosers  = pl.filter(p => p.is_winner === false).map(p => p.player_id);
+        // Fallback to position if is_winner not set
         const wGroup = mWinners.length ? mWinners : pl.filter(p => p.position <= winnerIds.length).map(p => p.player_id);
         const lGroup = mLosers.length  ? mLosers  : pl.filter(p => p.position > winnerIds.length).map(p => p.player_id);
-        const wSet = new Set(wGroup);
-        const lSet = new Set(lGroup);
-        if (winnerIds.every(id => wSet.has(id)) && loserIds.every(id => lSet.has(id))) {
+        if (winnerIds.every(id => new Set(wGroup).has(id)) && loserIds.every(id => new Set(lGroup).has(id))) {
           count++;
         }
       }

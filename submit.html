@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
 <div class="loading-screen" id="loader">
   <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
@@ -16,7 +17,7 @@
   <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Dashboard</a>
-    <a class="nav-link" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link" href="breakdown.html">Breakdown</a>
     <a class="nav-link" href="history.html">History</a>
     <a class="nav-link" href="rules.html">Rules</a>
     <a class="nav-link" href="settings.html">Settings</a>
@@ -26,7 +27,7 @@
 
 <main class="page" id="main" style="opacity:0">
   <div class="page-title">Submit <span>Match</span></div>
-  <div class="page-subtitle">Record a result — points are calculated automatically</div>
+  <div class="page-subtitle">Points are calculated automatically after submission</div>
 
   <div class="form-wrap">
     <div class="step-indicator">
@@ -41,7 +42,7 @@
     <div class="form-step active" id="step-1">
       <div class="form-card">
         <div class="form-title">What sport?</div>
-        <div class="form-subtitle">Choose the sport played</div>
+        <div class="form-subtitle">Choose the sport and match date</div>
 
         <div class="sport-picker">
           <div class="sport-option" data-sport="Pool">
@@ -76,13 +77,12 @@
           </div>
         </div>
 
-        <!-- Date picker -->
         <div class="field mt-24">
           <label class="field-label">Match Date</label>
           <input class="field-input" type="date" id="match-date">
           <div id="week-preview" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
-          <div id="past-warning" class="hidden" style="font-size:12px;color:#f59e0b;margin-top:4px;padding:8px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2)">
-            ⚠️ Past date — points will be recalculated from this week forward to maintain accuracy.
+          <div id="past-warning" class="hidden" style="font-size:12px;color:#f59e0b;margin-top:6px;padding:8px 12px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2)">
+            ⚠️ Past date detected — all points will be fully recalculated in chronological order.
           </div>
         </div>
 
@@ -96,11 +96,11 @@
     <div class="form-step" id="step-2">
       <div class="form-card">
         <div class="form-title" id="step2-title">Who played?</div>
-        <div class="form-subtitle" id="step2-sub">Select players in finishing order</div>
+        <div class="form-subtitle" id="step2-sub">Select players in order</div>
         <div class="placement-list" id="placement-list"></div>
         <div class="field mt-24">
           <label class="field-label">Notes (optional)</label>
-          <input class="field-input" type="text" id="match-notes" placeholder="Any notes...">
+          <input class="field-input" type="text" id="match-notes" placeholder="e.g. close game, comeback win...">
         </div>
         <div class="btn-row mt-8">
           <button class="btn btn-secondary" id="step2-back">← Back</button>
@@ -116,6 +116,16 @@
   </div>
 </main>
 
+<footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
+
+<nav class="nav-mobile-links">
+  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link active" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+</nav>
+
 <div class="toast-container" id="toasts"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -124,74 +134,61 @@
 <script src="js/engine.js"></script>
 <script>
 
-let state = {
+let S = {
   sport: null, poolMode: null, placements: [],
   players: [], allPlayerIds: [],
-  cfg: null, season: null, seasonStandings: [],
+  cfg: null, season: null,
   matchDate: null, matchWeek: null, isPast: false,
 };
 
+// ── STEPS ─────────────────────────────────────────────────
 function goStep(n) {
   document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
   document.getElementById(`step-${n}`).classList.add('active');
   for (let i = 1; i <= 3; i++) {
     document.getElementById(`dot-${i}`).classList.toggle('active', i === n);
-    document.getElementById(`dot-${i}`).classList.toggle('done', i < n);
+    document.getElementById(`dot-${i}`).classList.toggle('done',   i < n);
     const line = document.getElementById(`line-${i}`);
     if (line) line.classList.toggle('done', i < n);
   }
 }
 
-// ── DATE HANDLING ─────────────────────────────────────────────
-function updateDateDisplay() {
-  const dateInput = document.getElementById('match-date');
-  const val = dateInput.value;
+// ── DATE ──────────────────────────────────────────────────
+function updateDate() {
+  const val = document.getElementById('match-date').value;
   if (!val) return;
-
   const matchDate = new Date(val + 'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-  state.matchDate = val;
-  state.isPast = matchDate < today;
-
-  const seasonStart = state.cfg?.seasonStart || val;
-  state.matchWeek = getWeekNumber(matchDate, new Date(seasonStart));
-
-  document.getElementById('week-preview').textContent = `→ Week ${state.matchWeek}`;
-  document.getElementById('past-warning').classList.toggle('hidden', !state.isPast);
-  checkStep1Valid();
+  const today     = new Date(); today.setHours(0,0,0,0);
+  S.matchDate = val;
+  S.isPast    = matchDate < today;
+  S.matchWeek = getWeekNumber(matchDate, S.cfg?.seasonStart ? new Date(S.cfg.seasonStart) : matchDate);
+  document.getElementById('week-preview').textContent = `→ Week ${S.matchWeek}`;
+  document.getElementById('past-warning').classList.toggle('hidden', !S.isPast);
+  checkStep1();
 }
 
-function checkStep1Valid() {
-  const hasSport = !!state.sport;
-  const hasMode  = state.sport !== 'Pool' || !!state.poolMode;
-  const hasDate  = !!state.matchDate;
-  document.getElementById('step1-next').disabled = !(hasSport && hasMode && hasDate);
+function checkStep1() {
+  const ok = !!S.sport && (S.sport !== 'Pool' || !!S.poolMode) && !!S.matchDate;
+  document.getElementById('step1-next').disabled = !ok;
 }
 
-// Set default date to today
-function setDefaultDate() {
-  const today = toISODate(new Date());
-  document.getElementById('match-date').value = today;
-  updateDateDisplay();
-}
-
-document.getElementById('match-date').addEventListener('change', updateDateDisplay);
+document.getElementById('match-date').addEventListener('change', updateDate);
 
 document.querySelectorAll('.sport-option').forEach(el => {
   el.addEventListener('click', () => {
     document.querySelectorAll('.sport-option').forEach(e => e.classList.remove('selected'));
     el.classList.add('selected');
-    state.sport = el.dataset.sport;
+    S.sport = el.dataset.sport;
     const pw = document.getElementById('pool-mode-wrap');
-    if (state.sport === 'Pool') {
+    if (S.sport === 'Pool') {
       pw.classList.remove('hidden');
-      state.poolMode = null;
+      S.poolMode = null;
       document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
     } else {
       pw.classList.add('hidden');
-      state.poolMode = null;
+      S.poolMode = null;
     }
-    checkStep1Valid();
+    checkStep1();
   });
 });
 
@@ -199,153 +196,186 @@ document.querySelectorAll('.mode-option').forEach(el => {
   el.addEventListener('click', () => {
     document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
     el.classList.add('selected');
-    state.poolMode = el.dataset.mode;
-    checkStep1Valid();
+    S.poolMode = el.dataset.mode;
+    checkStep1();
   });
 });
 
-document.getElementById('step1-next').addEventListener('click', () => { buildPlacementUI(); goStep(2); });
+document.getElementById('step1-next').addEventListener('click', () => { buildStep2(); goStep(2); });
 
-// ── STEP 2 ────────────────────────────────────────────────────
-function buildPlacementUI() {
+// ── STEP 2 ────────────────────────────────────────────────
+function buildStep2() {
   const list  = document.getElementById('placement-list');
-  const sport = state.sport;
-  const mode  = state.poolMode;
-  let slots   = [];
+  const sport = S.sport;
+  const mode  = S.poolMode;
+
+  const playerOpts = S.players.map(p =>
+    `<option value="${p.id}">${p.name}</option>`
+  ).join('');
 
   if (sport === 'Pool') {
-    if (mode === 'Singles') {
-      slots = [{ label: 'Winner', pos: 1, isWinner: true }, { label: 'Loser', pos: 2, isWinner: false }];
-    } else if (mode === '2v2') {
-      slots = [
-        { label: 'Winner 1', pos: 1, isWinner: true  },
-        { label: 'Winner 2', pos: 2, isWinner: true  },
-        { label: 'Loser 1',  pos: 3, isWinner: false },
-        { label: 'Loser 2',  pos: 4, isWinner: false },
-      ];
-    } else if (mode === '2v1') {
-      // 2v1 has 3 players total: the solo player vs the team of 2
-      // We show 3 selects and a toggle for who won
-      slots = [
-        { label: 'Solo Player',   pos: 1, isWinner: null, role: 'solo'  },
-        { label: 'Team Player 1', pos: 2, isWinner: null, role: 'team'  },
-        { label: 'Team Player 2', pos: 3, isWinner: null, role: 'team'  },
-      ];
-    }
     document.getElementById('step2-title').textContent = `Pool — ${mode}`;
-    document.getElementById('step2-sub').textContent   = mode === '2v1' ? 'Select the 3 players, then pick who won' : 'Select winners and losers';
-  } else {
-    const ordinals = ['1st','2nd','3rd','4th','5th','6th'];
-    const max = Math.min(state.players.length, 6);
-    slots = ordinals.slice(0, max).map((o, i) => ({
-      label: `${o} Place`, pos: i + 1, optional: i >= 2,
-    }));
-    document.getElementById('step2-title').textContent = sport;
-    document.getElementById('step2-sub').textContent   = 'Select players in finishing order';
-  }
+    document.getElementById('step2-sub').textContent   = mode === '2v1'
+      ? 'Select the 3 players then pick who won'
+      : 'Select winners then losers';
 
-  const opts = `<option value="">— select —</option>` +
-    state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-
-  if (mode === '2v1') {
-    // Special 2v1 UI: 3 player selects + a winner toggle
-    list.innerHTML = `
-      <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:12px">
-        <b>2v1 format:</b> 1 solo player vs a team of 2. Select all 3 players then pick who won.
-      </div>
-      ${slots.map(slot => `
+    if (mode === 'Singles') {
+      list.innerHTML = buildSlots([
+        { label: 'Winner', pos: 1, marker: 'W' },
+        { label: 'Loser',  pos: 2, marker: 'L' },
+      ], playerOpts);
+    } else if (mode === '2v2') {
+      list.innerHTML = buildSlots([
+        { label: 'Winner 1', pos: 1, marker: 'W' },
+        { label: 'Winner 2', pos: 2, marker: 'W' },
+        { label: 'Loser 1',  pos: 3, marker: 'L' },
+        { label: 'Loser 2',  pos: 4, marker: 'L' },
+      ], playerOpts);
+    } else if (mode === '2v1') {
+      // Clear 2v1 UI: 3 player slots + who-won toggle
+      list.innerHTML = `
+        <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:10px">
+          <b>2v1:</b> Select the solo player and the two team players, then choose who won.
+        </div>
         <div class="placement-row">
-          <div class="placement-pos" style="background:${slot.role==='solo'?'rgba(0,229,176,0.15)':'rgba(99,102,241,0.1)'};color:${slot.role==='solo'?'var(--accent-dark)':'var(--accent2)'};border-color:${slot.role==='solo'?'rgba(0,229,176,0.3)':'rgba(99,102,241,0.2)'}">
-            ${slot.role === 'solo' ? '1' : slot.pos === 2 ? '2' : '3'}
-          </div>
-          <div class="placement-label">${slot.label}</div>
-          <select class="placement-select" data-pos="${slot.pos}" data-role="${slot.role}" data-optional="false">
-            <option value="">— select —</option>
-            ${state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+          <div class="placement-pos" style="background:rgba(0,229,176,0.15);color:var(--accent-dark)">Solo</div>
+          <div class="placement-label">Solo Player</div>
+          <select class="placement-select" id="p2v1-solo" data-role="solo">
+            <option value="">— select —</option>${playerOpts}
           </select>
-        </div>`).join('')}
-      <div class="placement-row" style="margin-top:4px">
-        <div class="placement-pos" style="font-size:10px">WIN</div>
-        <div class="placement-label">Who won?</div>
-        <select class="placement-select" id="winner-toggle" data-pos="0" data-optional="false">
-          <option value="">— select —</option>
-          <option value="solo">Solo player won</option>
-          <option value="team">Team of 2 won</option>
-        </select>
-      </div>`;
+        </div>
+        <div class="placement-row">
+          <div class="placement-pos" style="background:rgba(99,102,241,0.1);color:var(--accent2)">T1</div>
+          <div class="placement-label">Team Player 1</div>
+          <select class="placement-select" id="p2v1-team1" data-role="team">
+            <option value="">— select —</option>${playerOpts}
+          </select>
+        </div>
+        <div class="placement-row">
+          <div class="placement-pos" style="background:rgba(99,102,241,0.1);color:var(--accent2)">T2</div>
+          <div class="placement-label">Team Player 2</div>
+          <select class="placement-select" id="p2v1-team2" data-role="team">
+            <option value="">— select —</option>${playerOpts}
+          </select>
+        </div>
+        <div class="placement-row" style="margin-top:6px;background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.2)">
+          <div class="placement-pos" style="font-size:10px;background:rgba(245,158,11,0.1);color:#92400e">WIN</div>
+          <div class="placement-label">Who won?</div>
+          <select class="placement-select" id="p2v1-winner">
+            <option value="">— select —</option>
+            <option value="solo">Solo player won</option>
+            <option value="team">Team of 2 won</option>
+          </select>
+        </div>`;
+    }
   } else {
-    list.innerHTML = slots.map(slot => `
-      <div class="placement-row">
-        <div class="placement-pos ${slot.pos <= 2 ? 'pos-'+slot.pos : ''}">${slot.pos}</div>
-        <div class="placement-label">${slot.label}</div>
-        <select class="placement-select"
-          data-pos="${slot.pos}"
-          data-winner="${slot.isWinner}"
-          data-optional="false">
-          <option value="">— select —</option>
-          ${state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-        </select>
-      </div>`).join('');
+    // Bowling / Golf
+    document.getElementById('step2-title').textContent = sport;
+    document.getElementById('step2-sub').textContent   = 'Select players in finishing order (1st to last)';
+    const ordinals = ['1st','2nd','3rd','4th','5th','6th'];
+    const slots = ordinals.slice(0, Math.min(S.players.length, 6)).map((o, i) => ({
+      label:    `${o} Place`,
+      pos:      i + 1,
+      optional: i >= 2,
+      marker:   i === 0 ? '1' : i === 1 ? '2' : `${i+1}`,
+    }));
+    list.innerHTML = buildSlots(slots, playerOpts);
   }
 
   list.querySelectorAll('.placement-select').forEach(s => s.addEventListener('change', validateStep2));
   validateStep2();
 }
 
+function buildSlots(slots, playerOpts) {
+  return slots.map(slot => {
+    const posClass = slot.pos <= 2 ? `pos-${slot.pos}` : '';
+    const opts = slot.optional
+      ? `<option value="">— optional —</option>${playerOpts}`
+      : `<option value="">— select —</option>${playerOpts}`;
+    return `
+      <div class="placement-row">
+        <div class="placement-pos ${posClass}">${slot.marker || slot.pos}</div>
+        <div class="placement-label">${slot.label}</div>
+        <select class="placement-select" data-pos="${slot.pos}" data-optional="${slot.optional || false}">
+          ${opts}
+        </select>
+      </div>`;
+  }).join('');
+}
+
 function validateStep2() {
-  const selects   = [...document.querySelectorAll('#placement-list .placement-select')];
-  const required  = selects.filter(s => s.dataset.optional !== 'true');
-  const allFilled = required.every(s => s.value);
-  // For duplicate check, exclude the winner-toggle select (pos=0)
-  const playerVals = selects.filter(s => s.dataset.pos !== '0').map(s => s.value).filter(Boolean);
-  const unique = new Set(playerVals).size === playerVals.length;
-  document.getElementById('step2-next').disabled = !allFilled || !unique;
+  if (S.poolMode === '2v1') {
+    const solo  = document.getElementById('p2v1-solo')?.value;
+    const team1 = document.getElementById('p2v1-team1')?.value;
+    const team2 = document.getElementById('p2v1-team2')?.value;
+    const winner = document.getElementById('p2v1-winner')?.value;
+    const vals  = [solo, team1, team2].filter(Boolean);
+    const ok = solo && team1 && team2 && winner && new Set(vals).size === 3;
+    document.getElementById('step2-next').disabled = !ok;
+  } else {
+    const selects  = [...document.querySelectorAll('#placement-list .placement-select')];
+    const required = selects.filter(s => s.dataset.optional !== 'true');
+    const allFilled = required.every(s => s.value);
+    const vals   = selects.map(s => s.value).filter(Boolean);
+    const unique = new Set(vals).size === vals.length;
+    document.getElementById('step2-next').disabled = !allFilled || !unique;
+  }
 }
 
 document.getElementById('step2-back').addEventListener('click', () => goStep(1));
+
 document.getElementById('step2-next').addEventListener('click', () => {
-  const selects = [...document.querySelectorAll('#placement-list .placement-select')];
-
-  if (state.poolMode === '2v1') {
-    const winnerToggle = document.getElementById('winner-toggle')?.value; // 'solo' or 'team'
-    const soloSelect   = selects.find(s => s.dataset.role === 'solo');
-    const teamSelects  = selects.filter(s => s.dataset.role === 'team');
-
-    const soloWins = winnerToggle === 'solo';
-    state.placements = [
-      { playerId: soloSelect.value,      playerName: state.players.find(p=>p.id===soloSelect.value)?.name||'?',       position: 1, isWinner: soloWins  },
-      { playerId: teamSelects[0].value,  playerName: state.players.find(p=>p.id===teamSelects[0].value)?.name||'?',   position: 2, isWinner: !soloWins },
-      { playerId: teamSelects[1].value,  playerName: state.players.find(p=>p.id===teamSelects[1].value)?.name||'?',   position: 3, isWinner: !soloWins },
+  if (S.poolMode === '2v1') {
+    const soloId  = document.getElementById('p2v1-solo').value;
+    const team1Id = document.getElementById('p2v1-team1').value;
+    const team2Id = document.getElementById('p2v1-team2').value;
+    const whoWon  = document.getElementById('p2v1-winner').value; // 'solo' or 'team'
+    const soloWins = whoWon === 'solo';
+    S.placements = [
+      { playerId: soloId,  playerName: S.players.find(p=>p.id===soloId)?.name  || '?', position: 1, isWinner: soloWins  },
+      { playerId: team1Id, playerName: S.players.find(p=>p.id===team1Id)?.name || '?', position: 2, isWinner: !soloWins },
+      { playerId: team2Id, playerName: S.players.find(p=>p.id===team2Id)?.name || '?', position: 3, isWinner: !soloWins },
     ];
   } else {
-    const selects2 = [...document.querySelectorAll('#placement-list .placement-select')];
-    state.placements = selects2.filter(s => s.value && s.dataset.pos !== '0').map(s => ({
-      playerId:   s.value,
-      playerName: state.players.find(p => p.id === s.value)?.name || '?',
-      position:   parseInt(s.dataset.pos),
-      isWinner:   s.dataset.winner === 'true',
-    }));
+    const selects = [...document.querySelectorAll('#placement-list .placement-select')];
+    S.placements = selects.filter(s => s.value).map(s => {
+      const pos     = parseInt(s.dataset.pos);
+      const isPool  = S.sport === 'Pool';
+      // For Singles pos1=winner, pos2=loser. For 2v2 pos1&2=winners, pos3&4=losers
+      const isWinner = isPool
+        ? (S.poolMode === '2v2' ? pos <= 2 : pos === 1)
+        : null;
+      return {
+        playerId:   s.value,
+        playerName: S.players.find(p => p.id === s.value)?.name || '?',
+        position:   pos,
+        isWinner:   isWinner,
+      };
+    });
   }
-  buildConfirmUI();
+  buildConfirm();
   goStep(3);
 });
 
-// ── STEP 3 ────────────────────────────────────────────────────
-function buildConfirmUI() {
+// ── STEP 3: CONFIRM ───────────────────────────────────────
+function buildConfirm() {
   const card   = document.getElementById('confirm-card');
-  const sorted = [...state.placements].sort((a, b) => a.position - b.position);
+  const sorted = [...S.placements].sort((a, b) => a.position - b.position);
+
+  const rows = sorted.map(p => `
+    <div class="confirm-row">
+      <div class="confirm-pos">${p.position}</div>
+      <div style="flex:1;font-weight:600">${p.playerName}</div>
+      ${p.isWinner !== null && p.isWinner !== undefined
+        ? `<span class="tag ${p.isWinner ? 'tag-king' : ''}" style="${!p.isWinner ? 'background:rgba(239,68,68,0.08);color:#991b1b' : ''}">${p.isWinner ? 'Winner' : 'Loser'}</span>`
+        : ''}
+    </div>`).join('');
 
   card.innerHTML = `
     <div class="form-title">Confirm Match</div>
-    <div class="form-subtitle">${state.sport}${state.poolMode?' · '+state.poolMode:''} · ${state.matchDate} · Week ${state.matchWeek}</div>
-    ${state.isPast ? `<div style="font-size:12px;color:#f59e0b;padding:10px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2);margin-bottom:16px">⚠️ Past date — all points will be recalculated from Week ${state.matchWeek}</div>` : ''}
-    <div class="confirm-list">
-      ${sorted.map(p => `
-        <div class="confirm-row">
-          <div class="confirm-pos">${p.position}</div>
-          <div class="confirm-name">${p.playerName}</div>
-        </div>`).join('')}
-    </div>
+    <div class="form-subtitle">${S.sport}${S.poolMode ? ' · ' + S.poolMode : ''} &nbsp;·&nbsp; ${S.matchDate} &nbsp;·&nbsp; Week ${S.matchWeek}</div>
+    ${S.isPast ? `<div style="font-size:12px;color:#f59e0b;padding:10px 12px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2);margin-bottom:16px">⚠️ Past date — full points recalculation will run</div>` : ''}
+    <div class="confirm-list">${rows}</div>
     <div class="btn-row mt-16">
       <button class="btn btn-secondary" id="step3-back">← Back</button>
       <button class="btn btn-accent" id="step3-submit" style="flex:1">🏆 Submit Match</button>
@@ -355,62 +385,50 @@ function buildConfirmUI() {
   document.getElementById('step3-submit').addEventListener('click', submitMatch);
 }
 
-// ── SUBMIT ────────────────────────────────────────────────────
+// ── SUBMIT ────────────────────────────────────────────────
 async function submitMatch() {
   const btn = document.getElementById('step3-submit');
-  btn.disabled = true;
-  btn.textContent = 'Submitting...';
+  btn.disabled    = true;
+  btn.textContent = 'Saving match...';
 
   try {
-    const { cfg, season, placements, sport, poolMode, matchDate, matchWeek, isPast, allPlayerIds, players, seasonStandings } = state;
+    // 1. Insert match record
+    const match = await DB.insertMatch(
+      S.season.id, S.matchWeek, S.sport, S.poolMode,
+      document.getElementById('match-notes')?.value || '',
+      S.matchDate
+    );
 
-    // Insert match
-    const match = await DB.insertMatch(season.id, matchWeek, sport, poolMode,
-      document.getElementById('match-notes')?.value || '', matchDate);
-
-    // Insert placements
-    await DB.insertPlacements(match.id, placements.map(p => ({
+    // 2. Insert placements with isWinner flag
+    await DB.insertPlacements(match.id, S.placements.map(p => ({
       playerId:  p.playerId,
       position:  p.position,
-      isWinner:  p.isWinner !== undefined ? p.isWinner : null,
+      isWinner:  typeof p.isWinner === 'boolean' ? p.isWinner : null,
     })));
 
-    // Always do a full recalc — ensures anti-farm, rank, and underdog
-    // are calculated correctly against ALL existing matches, not just stale state
-    btn.textContent = isPast ? 'Recalculating points...' : 'Calculating points...';
-    const allMatchesOrdered = await DB.getAllMatchesOrdered(season.id);
-    const freshCfg = await DB.getConfig();
-    await Engine.fullRecalc(season.id, 1, allMatchesOrdered, players, freshCfg);
-    showSuccess(null, isPast);
+    // 3. Full recalc — always, guarantees accuracy
+    btn.textContent = 'Calculating points...';
+    const allMatches = await DB.getAllMatchesAsc(S.season.id);
+    const freshCfg   = await DB.getConfig();
+    await Engine.fullRecalc(S.season.id, allMatches, S.players, freshCfg);
+
+    showSuccess();
   } catch (err) {
     console.error(err);
     showToast('Error: ' + err.message, 'error');
-    const btn2 = document.getElementById('step3-submit');
-    if (btn2) { btn2.disabled = false; btn2.textContent = '🏆 Submit Match'; }
+    const b = document.getElementById('step3-submit');
+    if (b) { b.disabled = false; b.textContent = '🏆 Submit Match'; }
   }
 }
 
-function showSuccess(points, wasRecalc) {
+function showSuccess() {
   const card = document.getElementById('confirm-card');
-  let chipsHtml = '';
-  if (points) {
-    const chips = Object.entries(points)
-      .filter(([, d]) => round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog) > 0)
-      .map(([pid, d]) => {
-        const total  = round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog);
-        const player = state.players.find(p => p.id === pid);
-        return `<div class="pts-chip"><span class="pts-name">${player?.name||'?'}</span><span class="pts-val">+${fmtPts(total)} pts</span></div>`;
-      }).join('');
-    chipsHtml = chips ? `<div class="points-earned">${chips}</div>` : '';
-  }
-
   card.innerHTML = `
     <div class="success-card">
       <div class="success-icon">🏆</div>
       <div class="success-title">Match Recorded!</div>
-      <div class="success-sub">${wasRecalc ? 'Points recalculated from that week forward' : 'Points updated on the leaderboard'}</div>
-      ${chipsHtml}
-      <div class="btn-row" style="justify-content:center">
+      <div class="success-sub">Points updated — dashboard will refresh automatically</div>
+      <div class="btn-row" style="justify-content:center;margin-top:8px">
         <a class="btn btn-primary" href="index.html">← Dashboard</a>
         <button class="btn btn-secondary" onclick="resetForm()">Submit Another</button>
       </div>
@@ -418,48 +436,44 @@ function showSuccess(points, wasRecalc) {
 }
 
 function resetForm() {
-  state.sport = null; state.poolMode = null; state.placements = [];
-  state.matchDate = null; state.matchWeek = null; state.isPast = false;
+  S.sport = null; S.poolMode = null; S.placements = [];
+  S.matchDate = null; S.matchWeek = null; S.isPast = false;
   document.querySelectorAll('.sport-option,.mode-option').forEach(e => e.classList.remove('selected'));
-  document.getElementById('step1-next').disabled = true;
   document.getElementById('pool-mode-wrap').classList.add('hidden');
-  setDefaultDate();
+  document.getElementById('step1-next').disabled = true;
+  setTodayDate();
   goStep(1);
 }
 
+function setTodayDate() {
+  const today = toISODate(new Date());
+  document.getElementById('match-date').value = today;
+  updateDate();
+}
+
+// ── INIT ──────────────────────────────────────────────────
 async function init() {
   try {
-    const [cfg, season, players] = await Promise.all([DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()]);
-    const seasonStandings = await DB.getSeasonStandings(season.id);
-    state.cfg = cfg; state.season = season; state.players = players;
-    state.allPlayerIds = players.map(p => p.id);
-    state.seasonStandings = seasonStandings;
-    setDefaultDate();
+    const [cfg, season, players] = await Promise.all([
+      DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()
+    ]);
+    S.cfg = cfg; S.season = season; S.players = players;
+    S.allPlayerIds = players.map(p => p.id);
+    setTodayDate();
     document.getElementById('loader').classList.add('hidden');
     const main = document.getElementById('main');
-    main.style.opacity = '1'; main.style.transition = 'opacity 0.4s';
+    main.style.opacity = '1';
+    main.style.transition = 'opacity 0.4s';
   } catch (err) {
-    document.getElementById('loader').innerHTML =
-      `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px;font-weight:600">Could not load</div><div style="font-size:13px;color:var(--muted);margin-top:6px">${err.message}</div></div>`;
+    document.getElementById('loader').innerHTML = `
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px">⚠️</div>
+        <div style="margin-top:12px;font-weight:600">Could not load</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px">${err.message}</div>
+      </div>`;
   }
 }
 init();
 </script>
-
-
-<!-- FOOTER -->
-<footer style="text-align:center;padding:32px 20px 120px;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted);position:relative;z-index:1">
-  Developed by <span style="color:var(--accent-dark)">Dmarshmello</span>
-</footer>
-
-<!-- MOBILE BOTTOM NAV -->
-<nav class="nav-mobile-links">
-  <a class="nav-mobile-link " href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
-  <a class="nav-mobile-link " href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
-  <a class="nav-mobile-link " href="history.html"><span class="mob-icon">📋</span>History</a>
-  <a class="nav-mobile-link " href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
-  <a class="nav-mobile-link submit-mob" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
-</nav>
-
 </body>
 </html>

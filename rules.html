@@ -12,7 +12,7 @@
   <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Dashboard</a>
-    <a class="nav-link" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link" href="breakdown.html">Breakdown</a>
     <a class="nav-link" href="history.html">History</a>
     <a class="nav-link active" href="rules.html">Rules</a>
     <a class="nav-link" href="settings.html">Settings</a>
@@ -22,157 +22,99 @@
 
 <main class="page">
   <div class="page-title">Scoring <span>Rules</span></div>
-  <div class="page-subtitle">How points are calculated — automatically applied on every submission</div>
+  <div class="page-subtitle">All rules are applied automatically on every submission</div>
 
-  <!-- BASE SCORING -->
   <div class="section-label">Base Points</div>
   <div class="rules-grid mb-32">
-    <div class="rule-card" style="--rule-color: var(--pool)">
+    <div class="rule-card" style="--rule-color:var(--pool)">
       <div class="rule-icon-big">🎱</div>
       <div class="rule-title">Pool</div>
-      <div class="rule-body">
-        Winner takes all. Supports <b>1v1</b>, <b>2v1</b>, and <b>2v2</b> formats.
-        In team formats, points are shared equally among winners.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(0,212,170,0.1);--rule-text:var(--pool)">
-        Winner: +3 pts
-      </div>
+      <div class="rule-body">Winner takes all. Supports <b>1v1 (Singles)</b>, <b>2v1</b>, and <b>2v2</b> formats. In team formats points are shared equally among winners.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(0,212,170,0.1);--rule-text:var(--pool)">Winner: +3 pts</div>
     </div>
-    <div class="rule-card" style="--rule-color: var(--bowling)">
+    <div class="rule-card" style="--rule-color:var(--bowling)">
       <div class="rule-icon-big">🎳</div>
       <div class="rule-title">Bowling</div>
-      <div class="rule-body">
-        Supports 2–6 players. Only 1st and 2nd place earn points.
-        The rest get nothing — play better.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(124,108,250,0.1);--rule-text:var(--bowling)">
-        1st: +5 pts &nbsp;·&nbsp; 2nd: +2 pts
-      </div>
+      <div class="rule-body">2–6 players. Only 1st and 2nd place earn points. Everyone else gets nothing.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(124,108,250,0.1);--rule-text:var(--bowling)">1st: +5 pts &nbsp;·&nbsp; 2nd: +2 pts</div>
     </div>
-    <div class="rule-card" style="--rule-color: var(--golf)">
+    <div class="rule-card" style="--rule-color:var(--golf)">
       <div class="rule-icon-big">⛳</div>
       <div class="rule-title">Golf</div>
-      <div class="rule-body">
-        Same structure as Bowling. Best score wins.
-        Supports 2–6 players per round.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(56,189,248,0.1);--rule-text:var(--golf)">
-        1st: +5 pts &nbsp;·&nbsp; 2nd: +2 pts
-      </div>
+      <div class="rule-body">Same as Bowling. Best score wins. 2–6 players per round.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(56,189,248,0.1);--rule-text:var(--golf)">1st: +5 pts &nbsp;·&nbsp; 2nd: +2 pts</div>
     </div>
   </div>
 
-  <!-- MODIFIERS -->
-  <div class="section-label">Point Modifiers</div>
+  <div class="section-label">Modifiers</div>
   <div class="rules-grid mb-32">
-    <div class="rule-card" style="--rule-color: #f59e0b">
+    <div class="rule-card" style="--rule-color:#f59e0b">
       <div class="rule-icon-big">📈</div>
       <div class="rule-title">Upset Bonus</div>
-      <div class="rule-body">
-        Beat someone ranked above you and earn extra points. The bigger the rank gap, the bigger the bonus.
-        <br><br>
-        <b>Formula:</b> base pts × (1 + 0.2 × rank gap)
-        <br><br>
-        Example: Rank 5 beats Rank 1 → gap of 4 → 1.8× multiplier
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(245,158,11,0.1);--rule-text:#92400e">
-        Up to 2× points for big upsets
-      </div>
+      <div class="rule-body">Beat someone ranked above you and earn extra. The bigger the rank gap, the bigger the bonus.<br><br><b>Formula:</b> base pts × (1 + 0.2 × rank gap)<br><br>Rank 5 beats Rank 1 → ×1.8</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(245,158,11,0.1);--rule-text:#92400e">Up to 2× for big upsets</div>
     </div>
-    <div class="rule-card" style="--rule-color: var(--accent2)">
+    <div class="rule-card" style="--rule-color:var(--accent2)">
       <div class="rule-icon-big">⚡</div>
       <div class="rule-title">Underdog Multiplier</div>
-      <div class="rule-body">
-        The lowest-ranked player at the start of each week gets a 1.5× multiplier on
-        all points they earn that week. They still have to win — it just pays more when they do.
-        <br><br>
-        Resets every Monday based on current standings.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(99,102,241,0.1);--rule-text:var(--accent2)">
-        1.5× all earnings this week
-      </div>
+      <div class="rule-body">All players tied at the <b>lowest season score</b> get a 1.5× multiplier on all points earned that week. They still have to win — it just pays more. Resets every Monday.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(99,102,241,0.1);--rule-text:var(--accent2)">1.5× all earnings for the week</div>
     </div>
-    <div class="rule-card" style="--rule-color: #f59e0b">
+    <div class="rule-card" style="--rule-color:#f59e0b">
       <div class="rule-icon-big">👑</div>
-      <div class="rule-title">King Slay Bonus</div>
-      <div class="rule-body">
-        The King of the Week is the highest scorer from the previous week.
-        Beat the King in any match and earn a bonus on top of your normal points.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(245,158,11,0.1);--rule-text:#92400e">
-        +3 bonus pts for slaying the King
-      </div>
+      <div class="rule-title">King Slay</div>
+      <div class="rule-body">The King of the Week is the highest scorer from the previous week. Beat them in any match and earn a bonus on top of your normal points.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(245,158,11,0.1);--rule-text:#92400e">+3 bonus pts for slaying the King</div>
     </div>
-    <div class="rule-card" style="--rule-color: var(--danger)">
+    <div class="rule-card" style="--rule-color:var(--danger)">
       <div class="rule-icon-big">🚫</div>
       <div class="rule-title">Anti-Farm Rule</div>
-      <div class="rule-body">
-        You can't just keep beating the same person for full points.
-        After 2 wins against the same opponent in a week, extra wins earn reduced points.
-        <br><br>
-        <b>Exception:</b> If you're still ranked below your opponent, no reduction applies — grinding from below is encouraged.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(239,68,68,0.1);--rule-text:#991b1b">
-        3rd+ win vs same opp = 1 pt only
-      </div>
+      <div class="rule-body">After <b>2 wins</b> against the same opponent(s) in a week, extra wins only earn reduced points.<br><br><b>Exception:</b> If you're still ranked below your opponent, reduction doesn't apply — grinding from below is encouraged.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(239,68,68,0.1);--rule-text:#991b1b">3rd+ win vs same opp = 1 pt only</div>
     </div>
   </div>
 
-  <!-- SEASON STRUCTURE -->
   <div class="section-label">Season Structure</div>
   <div class="rules-grid mb-32">
-    <div class="rule-card" style="--rule-color: var(--accent)">
+    <div class="rule-card" style="--rule-color:var(--accent)">
       <div class="rule-icon-big">📅</div>
       <div class="rule-title">Weekly Reset</div>
-      <div class="rule-body">
-        Every Monday, the weekly points reset. The top scorer from the previous week is
-        crowned <b>King of the Week</b>. The lowest-ranked player becomes the new <b>Underdog</b>.
-      </div>
+      <div class="rule-body">Every Monday the weekly points reset. The top scorer becomes <b>King of the Week</b>. All tied-lowest players become <b>Underdogs</b> for the new week.</div>
     </div>
-    <div class="rule-card" style="--rule-color: var(--accent2)">
-      <div class="rule-icon-big">🗓️</div>
+    <div class="rule-card" style="--rule-color:var(--accent2)">
+      <div class="rule-icon-big">🍽️</div>
       <div class="rule-title">Monthly Prize</div>
-      <div class="rule-body">
-        At the end of every 4 weeks, the King of the Week at that moment wins a
-        <b>free meal</b> — paid for by everyone else. The ultimate goal.
-      </div>
-      <div class="rule-highlight" style="--rule-bg:rgba(99,102,241,0.1);--rule-text:var(--accent2)">
-        🍽️ Free meal every 4 weeks
-      </div>
-    </div>
-    <div class="rule-card" style="--rule-color: var(--gold)">
-      <div class="rule-icon-big">🏆</div>
-      <div class="rule-title">Season Length</div>
-      <div class="rule-body">
-        The season runs for <b>4 months</b>. Matches can be played any time, any number per week.
-        Flexible participation — play as many or as few as you want.
-      </div>
+      <div class="rule-body">Every 4 weeks, the King of the Week at that point wins a <b>free meal</b> — paid by everyone else.</div>
+      <div class="rule-highlight" style="--rule-bg:rgba(99,102,241,0.1);--rule-text:var(--accent2)">Free meal every 4 weeks</div>
     </div>
   </div>
 
-  <!-- QUICK REF TABLE -->
   <div class="section-label">Quick Reference</div>
   <div class="card-solid" style="padding:0;overflow:hidden;margin-bottom:32px">
     <table class="week-table" style="margin:0">
-      <thead>
-        <tr>
-          <th>Situation</th>
-          <th>Points</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Situation</th><th style="text-align:right">Points</th></tr></thead>
       <tbody>
         <tr><td>Win a Pool match (1v1)</td><td class="td-pts">+3</td></tr>
-        <tr><td>Win Bowling/Golf (1st place)</td><td class="td-pts">+5</td></tr>
+        <tr><td>Win Bowling/Golf (1st)</td><td class="td-pts">+5</td></tr>
         <tr><td>Bowling/Golf 2nd place</td><td class="td-pts">+2</td></tr>
         <tr><td>Beat the King of the Week</td><td class="td-pts">+3 bonus</td></tr>
-        <tr><td>Underdog week multiplier</td><td class="td-pts">×1.5</td></tr>
-        <tr><td>Upset a higher-ranked player (1 rank gap)</td><td class="td-pts">×1.2</td></tr>
-        <tr><td>Upset a higher-ranked player (3 rank gap)</td><td class="td-pts">×1.6</td></tr>
-        <tr><td>3rd+ win vs same opponent same week</td><td class="td-pts">1 pt</td></tr>
+        <tr><td>Underdog multiplier</td><td class="td-pts">×1.5</td></tr>
+        <tr><td>Upset — 1 rank gap</td><td class="td-pts">×1.2</td></tr>
+        <tr><td>Upset — 3 rank gap</td><td class="td-pts">×1.6</td></tr>
+        <tr><td>3rd+ win vs same opp same week</td><td class="td-pts">1 pt</td></tr>
       </tbody>
     </table>
   </div>
-
 </main>
+
+<footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
+
+<nav class="nav-mobile-links">
+  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+</nav>
 </body>
 </html>

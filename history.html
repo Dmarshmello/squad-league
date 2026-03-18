@@ -5,88 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Match History — Squad League</title>
   <link rel="stylesheet" href="css/style.css">
-  <style>
-    /* Modal */
-    .modal-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.4);
-      backdrop-filter: blur(4px);
-      z-index: 200;
-      display: flex; align-items: center; justify-content: center;
-      padding: 20px;
-      animation: fadeIn 0.2s ease;
-    }
-    .modal-overlay.hidden { display: none; }
-    .modal {
-      background: var(--surface-solid);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      padding: 32px;
-      width: 100%; max-width: 480px;
-      box-shadow: var(--shadow-lg);
-      animation: slideUp 0.25s ease;
-      position: relative;
-    }
-    @keyframes slideUp {
-      from { opacity:0; transform:translateY(20px); }
-      to   { opacity:1; transform:translateY(0); }
-    }
-    .modal-close {
-      position: absolute; top: 20px; right: 20px;
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      border: 1px solid var(--border);
-      background: var(--bg2);
-      cursor: pointer;
-      font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.1s;
-    }
-    .modal-close:hover { background: var(--border); }
-    .modal-title { font-family: var(--font-display); font-size: 26px; margin-bottom: 4px; }
-    .modal-meta  { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
-    .modal-players { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-    .modal-player-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 14px;
-      background: var(--bg2);
-      border-radius: var(--radius-sm);
-    }
-    .modal-pos { font-family: var(--font-display); font-size: 22px; color: var(--muted); width: 28px; }
-    .modal-pos.p1 { color: var(--accent-dark); }
-    .modal-pos.p2 { color: var(--accent2); }
-    .modal-pname { font-weight: 600; font-size: 15px; }
-    .modal-notes { font-size: 13px; color: var(--muted); margin-bottom: 20px; font-style: italic; }
-    .deleted-banner {
-      background: rgba(239,68,68,0.08);
-      border: 1px solid rgba(239,68,68,0.2);
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      font-size: 13px;
-      color: #991b1b;
-      margin-bottom: 16px;
-    }
-    /* Deleted match card style */
-    .match-item.deleted {
-      opacity: 0.45;
-      filter: grayscale(0.5);
-    }
-    .match-item.deleted .match-winner { text-decoration: line-through; }
-    .deleted-badge {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      background: rgba(239,68,68,0.1);
-      color: #991b1b;
-      border: 1px solid rgba(239,68,68,0.2);
-      border-radius: 100px;
-      padding: 2px 8px;
-      margin-left: 6px;
-    }
-  </style>
 </head>
 <body>
+
 <div class="loading-screen" id="loader">
   <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
@@ -96,7 +17,7 @@
   <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Dashboard</a>
-    <a class="nav-link" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link" href="breakdown.html">Breakdown</a>
     <a class="nav-link active" href="history.html">History</a>
     <a class="nav-link" href="rules.html">Rules</a>
     <a class="nav-link" href="settings.html">Settings</a>
@@ -106,28 +27,36 @@
 
 <main class="page" id="main" style="opacity:0">
   <div class="page-title">Match <span>History</span></div>
-  <div class="page-subtitle">Every game, every result — click any match for details</div>
+  <div class="page-subtitle">Click any match to see details</div>
 
   <div class="filter-bar" id="sport-filter">
     <button class="filter-btn active" data-filter="all">All</button>
     <button class="filter-btn" data-filter="Pool">🎱 Pool</button>
     <button class="filter-btn" data-filter="Bowling">🎳 Bowling</button>
     <button class="filter-btn" data-filter="Golf">⛳ Golf</button>
-    <button class="filter-btn" data-filter="deleted" style="margin-left:auto;color:var(--danger)">Show Deleted</button>
+    <button class="filter-btn" data-filter="deleted" style="margin-left:auto">🗑 Deleted</button>
   </div>
-
   <div class="filter-bar" id="player-filter"></div>
-
   <div id="matches-container"></div>
 </main>
 
-<!-- MODAL -->
+<!-- MATCH MODAL -->
 <div class="modal-overlay hidden" id="modal-overlay">
-  <div class="modal" id="modal">
+  <div class="modal">
     <button class="modal-close" id="modal-close">✕</button>
     <div id="modal-content"></div>
   </div>
 </div>
+
+<footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
+
+<nav class="nav-mobile-links">
+  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link active" href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+</nav>
 
 <div class="toast-container" id="toasts"></div>
 
@@ -136,14 +65,10 @@
 <script src="js/db.js"></script>
 <script src="js/engine.js"></script>
 <script>
-let allMatches   = [];
-let allPlayers   = [];
-let activeSeason = null;
-let activeFilter = 'all';
-let activePlayer = 'all';
-let showDeleted  = false;
 
-// ── RENDER ────────────────────────────────────────────────────
+let allMatches = [], allPlayers = [], activeSeason = null;
+let activeFilter = 'all', activePlayer = 'all', showDeleted = false;
+
 function renderMatches() {
   const container = document.getElementById('matches-container');
   let filtered = allMatches;
@@ -151,7 +76,7 @@ function renderMatches() {
   if (activeFilter === 'deleted') {
     filtered = filtered.filter(m => m.deleted);
   } else {
-    if (!showDeleted) filtered = filtered.filter(m => !m.deleted);
+    filtered = filtered.filter(m => !m.deleted);
     if (activeFilter !== 'all') filtered = filtered.filter(m => m.sport === activeFilter);
   }
   if (activePlayer !== 'all') {
@@ -175,20 +100,19 @@ function renderMatches() {
 
   const weeks = Object.keys(byWeek).sort((a, b) => b - a);
   container.innerHTML = weeks.map(week => {
-    const wMatches = byWeek[week];
-    const rows = wMatches.map(m => {
-      const pl     = (m.match_placements||[]).sort((a,b) => a.position - b.position);
-      const winner = pl[0]?.players?.name || '?';
-      const others = pl.slice(1).map(p => p.players?.name).filter(Boolean).join(', ');
-      const sport  = m.sport || '';
-      const isDeleted = m.deleted;
+    const rows = byWeek[week].map(m => {
+      const pl      = (m.match_placements||[]).sort((a,b) => a.position - b.position);
+      const winners = pl.filter(p => p.is_winner === true || p.position === 1);
+      const winner  = pl[0]?.players?.name || '?';
+      const others  = pl.slice(1).map(p => p.players?.name).filter(Boolean).join(', ');
+      const sport   = m.sport || '';
       return `
-        <div class="match-item ${isDeleted ? 'deleted' : ''}" data-id="${m.id}" style="cursor:pointer">
+        <div class="match-item ${m.deleted ? 'deleted' : ''}" data-id="${m.id}" style="cursor:pointer">
           <div class="match-sport-badge ${sport.toLowerCase()}">${SPORT_EMOJI[sport]||'🎯'}</div>
           <div class="match-info">
             <div class="match-winner">
               ${winner}
-              ${isDeleted ? '<span class="deleted-badge">Deleted</span>' : ''}
+              ${m.deleted ? '<span class="deleted-badge">Deleted</span>' : ''}
             </div>
             <div class="match-detail">${sport}${m.pool_mode?' · '+m.pool_mode:''} ${others?'· vs '+others:''}</div>
           </div>
@@ -198,36 +122,30 @@ function renderMatches() {
           </div>
         </div>`;
     }).join('');
-
     return `<div style="margin-bottom:28px">
       <div class="section-label">Week ${week}</div>
       <div class="match-list">${rows}</div>
     </div>`;
   }).join('');
 
-  // Attach click listeners
   container.querySelectorAll('.match-item').forEach(el => {
     el.addEventListener('click', () => openModal(el.dataset.id));
   });
 }
 
-// ── MODAL ─────────────────────────────────────────────────────
 function openModal(matchId) {
   const match = allMatches.find(m => m.id === matchId);
   if (!match) return;
+  const pl    = (match.match_placements||[]).sort((a,b) => a.position - b.position);
+  const sport = match.sport || '';
 
-  const pl      = (match.match_placements||[]).sort((a,b) => a.position - b.position);
-  const sport   = match.sport || '';
-  const isDeleted = match.deleted;
-
-  const posLabel = i => {
+  const posLabel = (p, i) => {
     if (sport === 'Pool') {
-      if (match.pool_mode === 'Singles') return i === 0 ? 'Winner' : 'Loser';
-      if (match.pool_mode === '2v2') return i < 2 ? 'Winner' : 'Loser';
-      if (match.pool_mode === '2v1') return i === 0 ? 'Winner' : 'Loser/Opponent';
+      if (p.is_winner === true)  return 'Winner';
+      if (p.is_winner === false) return 'Loser';
+      return p.position === 1 ? 'Winner' : 'Loser';
     }
-    const ords = ['1st','2nd','3rd','4th','5th','6th'];
-    return ords[i] || `${i+1}th`;
+    return ['1st','2nd','3rd','4th','5th','6th'][i] || `${i+1}th`;
   };
 
   const playersHtml = pl.map((p, i) => `
@@ -235,112 +153,86 @@ function openModal(matchId) {
       <div class="modal-pos ${i===0?'p1':i===1?'p2':''}">${i+1}</div>
       ${avatarHtml(p.players||{name:'?'})}
       <div>
-        <div class="modal-pname">${p.players?.name || '?'}</div>
-        <div style="font-size:12px;color:var(--muted)">${posLabel(i)}</div>
+        <div class="modal-pname">${p.players?.name||'?'}</div>
+        <div style="font-size:12px;color:var(--muted)">${posLabel(p,i)}</div>
       </div>
     </div>`).join('');
 
   document.getElementById('modal-content').innerHTML = `
     <div style="font-size:28px;margin-bottom:8px">${SPORT_EMOJI[sport]||'🎯'}</div>
     <div class="modal-title">${sport}${match.pool_mode?' — '+match.pool_mode:''}</div>
-    <div class="modal-meta">
-      Week ${match.week} &nbsp;·&nbsp; ${fmtDate(match.match_date || match.created_at)}
-    </div>
-    ${isDeleted ? '<div class="deleted-banner">⚠️ This match has been deleted and its points removed.</div>' : ''}
+    <div class="modal-meta">Week ${match.week} &nbsp;·&nbsp; ${fmtDate(match.match_date||match.created_at)}</div>
+    ${match.deleted ? '<div class="deleted-banner">⚠️ This match is deleted — its points have been removed.</div>' : ''}
     <div class="modal-players">${playersHtml}</div>
     ${match.notes ? `<div class="modal-notes">📝 ${match.notes}</div>` : ''}
     <div class="btn-row">
-      ${isDeleted
+      ${match.deleted
         ? `<button class="btn btn-secondary btn-full" id="modal-restore">↩ Restore Match</button>`
-        : `<button class="btn btn-secondary" id="modal-delete" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">🗑 Delete Match</button>`
+        : `<button class="btn btn-full" style="background:rgba(239,68,68,0.1);color:#991b1b;border:1px solid rgba(239,68,68,0.2)" id="modal-delete">🗑 Delete Match</button>`
       }
     </div>`;
 
   document.getElementById('modal-overlay').classList.remove('hidden');
 
-  if (!isDeleted) {
-    document.getElementById('modal-delete').addEventListener('click', async () => {
-      if (!confirm('Delete this match? It will be hidden but kept in history.')) return;
-      await softDelete(matchId);
-    });
+  if (match.deleted) {
+    document.getElementById('modal-restore').addEventListener('click', () => restoreMatch(matchId));
   } else {
-    document.getElementById('modal-restore').addEventListener('click', async () => {
-      await restoreMatch(matchId);
+    document.getElementById('modal-delete').addEventListener('click', () => {
+      if (!confirm('Delete this match? It stays visible in history but its points are removed.')) return;
+      deleteMatch(matchId);
     });
   }
 }
 
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-}
+function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
 document.getElementById('modal-close').addEventListener('click', closeModal);
 document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 });
 
-// ── SOFT DELETE / RESTORE ─────────────────────────────────────
-async function softDelete(matchId) {
+async function deleteMatch(matchId) {
   try {
     await DB.softDeleteMatch(matchId);
-    const match = allMatches.find(m => m.id === matchId);
-    if (match) {
-      match.deleted = true;
-      // Recalculate from that week
-      showToast('Recalculating points...', '');
-      const allMatchesOrdered = await DB.getAllMatchesOrdered(activeSeason.id);
-      const players = allPlayers;
-      const cfg = await DB.getConfig();
-      await Engine.fullRecalc(activeSeason.id, match.week, allMatchesOrdered, players, cfg);
-    }
+    const m = allMatches.find(m => m.id === matchId);
+    if (m) m.deleted = true;
     closeModal();
+    showToast('Recalculating points...', '');
+    const all = await DB.getAllMatchesAsc(activeSeason.id);
+    const cfg = await DB.getConfig();
+    await Engine.fullRecalc(activeSeason.id, all, allPlayers, cfg);
     renderMatches();
     showToast('Match deleted and points recalculated', 'success');
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
+  } catch (err) { showToast('Error: ' + err.message, 'error'); }
 }
 
 async function restoreMatch(matchId) {
   try {
     await DB.restoreMatch(matchId);
-    const match = allMatches.find(m => m.id === matchId);
-    if (match) {
-      match.deleted = false;
-      showToast('Recalculating points...', '');
-      const allMatchesOrdered = await DB.getAllMatchesOrdered(activeSeason.id);
-      const cfg = await DB.getConfig();
-      await Engine.fullRecalc(activeSeason.id, match.week, allMatchesOrdered, allPlayers, cfg);
-    }
+    const m = allMatches.find(m => m.id === matchId);
+    if (m) m.deleted = false;
     closeModal();
+    showToast('Recalculating points...', '');
+    const all = await DB.getAllMatchesAsc(activeSeason.id);
+    const cfg = await DB.getConfig();
+    await Engine.fullRecalc(activeSeason.id, all, allPlayers, cfg);
     renderMatches();
     showToast('Match restored and points recalculated', 'success');
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
+  } catch (err) { showToast('Error: ' + err.message, 'error'); }
 }
 
-// ── FILTERS ───────────────────────────────────────────────────
 document.getElementById('sport-filter').addEventListener('click', e => {
   const btn = e.target.closest('.filter-btn');
   if (!btn) return;
   document.querySelectorAll('#sport-filter .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if (btn.dataset.filter === 'deleted') {
-    showDeleted = !showDeleted;
-    activeFilter = showDeleted ? 'deleted' : 'all';
-    btn.style.background = showDeleted ? 'var(--danger)' : '';
-    btn.style.color      = showDeleted ? '#fff' : 'var(--danger)';
-  } else {
-    activeFilter = btn.dataset.filter;
-  }
+  activeFilter = btn.dataset.filter;
   renderMatches();
 });
 
 async function init() {
   try {
     const [season, players] = await Promise.all([DB.getActiveSeason(), DB.getPlayers()]);
-    activeSeason = season;
-    allPlayers   = players;
+    activeSeason = season; allPlayers = players;
     allMatches   = await DB.getAllMatchesDesc(season.id);
 
     const pfBar = document.getElementById('player-filter');
@@ -365,6 +257,7 @@ async function init() {
   }
 }
 init();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') init(); });
 </script>
 </body>
 </html>

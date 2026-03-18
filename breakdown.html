@@ -5,88 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Points Breakdown — Squad League</title>
   <link rel="stylesheet" href="css/style.css">
-  <style>
-    .player-tab-bar {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
-    }
-    .player-tab {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 16px;
-      border-radius: 100px;
-      border: 1px solid var(--border);
-      background: var(--surface-solid);
-      cursor: pointer;
-      font-size: 13px; font-weight: 500;
-      color: var(--muted);
-      transition: all 0.15s;
-    }
-    .player-tab:hover { color: var(--text); }
-    .player-tab.active { background: var(--text); color: #fff; border-color: var(--text); }
-    .player-tab .tab-avatar {
-      width: 24px; height: 24px;
-      border-radius: 50%;
-      background: var(--bg2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700;
-      overflow: hidden;
-    }
-    .player-tab .tab-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-    .breakdown-header {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 12px;
-      margin-bottom: 28px;
-    }
-    .breakdown-stat {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      text-align: center;
-    }
-    .breakdown-stat-val {
-      font-family: var(--font-display);
-      font-size: 28px; color: var(--text);
-    }
-    .breakdown-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
-
-    .match-breakdown-item {
-      background: var(--surface-solid);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 16px 20px;
-      margin-bottom: 10px;
-      cursor: pointer;
-      transition: box-shadow 0.15s;
-    }
-    .match-breakdown-item:hover { box-shadow: var(--shadow-md); }
-    .match-breakdown-top {
-      display: flex; align-items: center; gap: 12px;
-    }
-    .match-breakdown-detail {
-      display: none;
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
-      font-size: 13px;
-    }
-    .match-breakdown-item.expanded .match-breakdown-detail { display: block; }
-    .breakdown-calc-row {
-      display: flex; justify-content: space-between;
-      padding: 4px 0;
-      color: var(--text2);
-    }
-    .breakdown-calc-row.total {
-      font-weight: 700; color: var(--accent-dark);
-      border-top: 1px solid var(--border);
-      margin-top: 6px; padding-top: 8px;
-    }
-    .breakdown-calc-row .neg { color: var(--danger); }
-    .breakdown-calc-row .pos { color: var(--accent-dark); }
-  </style>
 </head>
 <body>
+
 <div class="loading-screen" id="loader">
   <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
@@ -96,7 +17,7 @@
   <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Dashboard</a>
-    <a class="nav-link active" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link active" href="breakdown.html">Breakdown</a>
     <a class="nav-link" href="history.html">History</a>
     <a class="nav-link" href="rules.html">Rules</a>
     <a class="nav-link" href="settings.html">Settings</a>
@@ -106,13 +27,22 @@
 
 <main class="page" id="main" style="opacity:0">
   <div class="page-title">Points <span>Breakdown</span></div>
-  <div class="page-subtitle">Exactly how every point was earned — click a match to expand</div>
-
+  <div class="page-subtitle">Exact calculation for every match — click to expand</div>
   <div class="player-tab-bar" id="player-tabs"></div>
   <div id="breakdown-content">
     <div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Loading...</div></div>
   </div>
 </main>
+
+<footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
+
+<nav class="nav-mobile-links">
+  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link active" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+</nav>
 
 <div class="toast-container" id="toasts"></div>
 
@@ -122,84 +52,109 @@
 <script src="js/engine.js"></script>
 <script>
 
-let allPlayers = [], allMatches = [], seasonStandings = [], weekStandings = [];
+let allPlayers = [], allMatchesSorted = [], seasonStandings = [];
 let activeSeason = null, cfg = null;
 let activePlayerId = null;
+let matchBreakdowns = {}; // matchId -> { playerId -> delta }
+
+// Replay all matches through engine to get per-match point breakdowns
+function replayAllMatches() {
+  const allPlayerIds = allPlayers.map(p => p.id);
+  const runningTotals = {};
+  allPlayerIds.forEach(id => { runningTotals[id] = 0; });
+
+  const processedSoFar = [];
+  matchBreakdowns = {};
+
+  for (const match of allMatchesSorted) {
+    if (match.deleted) continue;
+
+    const standingsArr = allPlayerIds.map(id => ({ player_id: id, total: runningTotals[id] }));
+    const rankMap      = Engine.buildRankMap(standingsArr, allPlayers);
+    const underdogIds  = Engine.getUnderdogIds(standingsArr, allPlayers);
+
+    const cfgNow = { ...cfg };
+    if (cfg.currentKing) {
+      const kp = allPlayers.find(p => p.name === cfg.currentKing);
+      cfgNow._kingId = kp ? kp.id : null;
+    }
+
+    const pts = Engine.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);
+    matchBreakdowns[match.id] = pts;
+
+    // Update running totals
+    allPlayerIds.forEach(id => {
+      const d = pts[id];
+      if (d) runningTotals[id] += round2(d.pool + d.bowling + d.golf + d.bonus + d.underdog);
+    });
+
+    processedSoFar.push(match);
+  }
+}
 
 function buildBreakdownForPlayer(playerId) {
-  const player = allPlayers.find(p => p.id === playerId);
+  const player  = allPlayers.find(p => p.id === playerId);
   if (!player) return;
-
   const content = document.getElementById('breakdown-content');
 
-  // Get season row
-  const sznRow = seasonStandings.find(r => r.player_id === playerId) || {};
-  const totalPts   = parseFloat(sznRow.total    || 0);
-  const poolPts    = parseFloat(sznRow.pool     || 0);
-  const bowlPts    = parseFloat(sznRow.bowling  || 0);
-  const golfPts    = parseFloat(sznRow.golf     || 0);
-  const bonusPts   = parseFloat(sznRow.bonus    || 0);
-  const dogPts     = parseFloat(sznRow.underdog || 0);
-  const poolWins   = sznRow.pool_wins    || 0;
-  const bowlWins   = sznRow.bowling_wins || 0;
-  const golfWins   = sznRow.golf_wins    || 0;
-  const totalWins  = poolWins + bowlWins + golfWins;
+  // Totals from DB (source of truth)
+  const sznRow   = seasonStandings.find(r => r.player_id === playerId) || {};
+  const totalPts = parseFloat(sznRow.total    || 0);
+  const bonusPts = parseFloat(sznRow.bonus    || 0);
+  const dogPts   = parseFloat(sznRow.underdog || 0);
+  const poolWins = parseInt(sznRow.pool_wins    || 0);
+  const bowlWins = parseInt(sznRow.bowling_wins || 0);
+  const golfWins = parseInt(sznRow.golf_wins    || 0);
 
-  // Get matches this player was involved in
-  const playerMatches = allMatches.filter(m =>
+  // Matches involving this player (oldest first for chronological display)
+  const playerMatches = allMatchesSorted.filter(m =>
     !m.deleted && (m.match_placements||[]).some(p => p.player_id === playerId)
   );
 
-  // Build per-match breakdown
   const matchCards = playerMatches.map(match => {
-    const pl = (match.match_placements||[]).sort((a,b) => a.position - b.position);
-    const myPlacement = pl.find(p => p.player_id === playerId);
-    if (!myPlacement) return '';
+    const pl       = (match.match_placements||[]).sort((a,b) => a.position - b.position);
+    const myP      = pl.find(p => p.player_id === playerId);
+    if (!myP) return '';
 
-    const myPos   = myPlacement.position;
-    const sport   = match.sport;
-    const isWinner = myPos === 1;
-    const others  = pl.filter(p => p.player_id !== playerId).map(p => p.players?.name).filter(Boolean);
+    const earned   = matchBreakdowns[match.id]?.[playerId];
+    if (!earned) return '';
 
-    // Reconstruct what points this player likely earned in this match
-    // We show approximate breakdown from what we know
+    const sport    = match.sport;
+    const sportKey = sport.toLowerCase();
+    const sportPts = round2(earned[sportKey] || 0);
+    const bonus    = round2(earned.bonus    || 0);
+    const underdog = round2(earned.underdog || 0);
+    const total    = round2(sportPts + bonus + underdog);
+    if (total === 0 && earned.wins === 0) return '';
+
+    const others = pl.filter(p => p.player_id !== playerId).map(p => p.players?.name).filter(Boolean);
+
+    // Work out base pts to show the multiplier effect
+    const didWin  = myP.is_winner === true || (myP.is_winner === null && myP.position === 1);
+    const is2nd   = !didWin && myP.position === 2 && sport !== 'Pool';
+    const basePts = didWin
+      ? (sport === 'Pool' ? cfg.poolWinPts : cfg.firstPts)
+      : is2nd ? cfg.secondPts : 0;
+
     const lines = [];
-    let matchTotal = 0;
-
-    if (sport === 'Pool' && isWinner) {
-      lines.push({ label: `Pool win (base)`, val: fmtPts(cfg.poolWinPts) });
-      matchTotal += cfg.poolWinPts;
-    } else if ((sport === 'Bowling' || sport === 'Golf') && myPos === 1) {
-      lines.push({ label: `${sport} 1st place (base)`, val: fmtPts(cfg.firstPts) });
-      matchTotal += cfg.firstPts;
-    } else if ((sport === 'Bowling' || sport === 'Golf') && myPos === 2) {
-      lines.push({ label: `${sport} 2nd place (base)`, val: fmtPts(cfg.secondPts) });
-      matchTotal += cfg.secondPts;
+    if (didWin) {
+      lines.push({ label: `${sport} ${sport==='Pool'?'win':'1st place'} — base`, val: fmtPts(basePts) });
+      const upsetBonus = round2(sportPts - basePts - underdog);
+      if (upsetBonus > 0.01) lines.push({ label: `Upset bonus`, val: '+' + fmtPts(upsetBonus), pos: true });
+    } else if (is2nd) {
+      lines.push({ label: `${sport} 2nd place`, val: fmtPts(cfg.secondPts) });
     } else {
-      lines.push({ label: `No points (position ${myPos})`, val: '0' });
+      lines.push({ label: `No points earned this match`, val: '0' });
     }
+    if (underdog > 0) lines.push({ label: `Underdog ×${cfg.underdogMultiplier}`, val: '+' + fmtPts(underdog), pos: true });
+    if (bonus > 0)    lines.push({ label: `Bonus (king slay / upset)`, val: '+' + fmtPts(bonus), pos: true });
 
-    // Note: exact multipliers would need full engine replay per match
-    // We show what we can derive simply
-    const isUnderdog = cfg.currentUnderdogs?.includes(player.name);
-    if (isUnderdog && matchTotal > 0) {
-      const bonus = round2(matchTotal * (cfg.underdogMultiplier - 1));
-      lines.push({ label: `Underdog multiplier (×${cfg.underdogMultiplier})`, val: '+' + fmtPts(bonus), pos: true });
-      matchTotal = round2(matchTotal * cfg.underdogMultiplier);
-    }
-
-    const kingId = allPlayers.find(p => p.name === cfg.currentKing)?.id;
-    const facedKing = pl.some(p => p.player_id === kingId && p.position !== myPos);
-    if (facedKing && isWinner) {
-      lines.push({ label: `King slay bonus`, val: '+' + fmtPts(cfg.kingSlay), pos: true });
-      matchTotal += cfg.kingSlay;
-    }
-
-    const linesHtml = lines.map(l => `
-      <div class="breakdown-calc-row">
+    const linesHtml = lines.map(l =>
+      `<div class="breakdown-calc-row">
         <span>${l.label}</span>
-        <span class="${l.pos ? 'pos' : ''}">${l.val}</span>
-      </div>`).join('');
+        <span class="${l.pos?'pos':''}">${l.val}</span>
+      </div>`
+    ).join('');
 
     return `
       <div class="match-breakdown-item" onclick="this.classList.toggle('expanded')">
@@ -209,12 +164,12 @@ function buildBreakdownForPlayer(playerId) {
             <div style="font-weight:600;font-size:14px">${sport}${match.pool_mode?' · '+match.pool_mode:''}</div>
             <div style="font-size:12px;color:var(--muted)">
               Wk ${match.week} · ${fmtDate(match.match_date||match.created_at)}
-              · vs ${others.join(', ')||'—'}
+              ${others.length ? '· vs ' + others.join(', ') : ''}
             </div>
           </div>
           <div style="text-align:right;flex-shrink:0">
             <div style="font-family:var(--font-display);font-size:20px;color:var(--accent-dark)">
-              ${myPos === 1 || myPos === 2 ? '+' + fmtPts(matchTotal) : '0'}
+              ${total > 0 ? '+' + fmtPts(total) : '—'}
             </div>
             <div style="font-size:11px;color:var(--muted)">pts</div>
           </div>
@@ -222,37 +177,34 @@ function buildBreakdownForPlayer(playerId) {
         <div class="match-breakdown-detail">
           ${linesHtml}
           <div class="breakdown-calc-row total">
-            <span>Match total</span>
-            <span>${fmtPts(matchTotal)} pts</span>
+            <span>Match total</span><span>${fmtPts(total)} pts</span>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px">
-            ↕ Tap to collapse · Upset multipliers applied at time of match based on rankings
-          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px">Tap to collapse</div>
         </div>
       </div>`;
-  }).join('');
+  }).filter(Boolean).join('');
 
   content.innerHTML = `
     <div class="breakdown-header">
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${fmtPts(totalPts)}</div>
-        <div class="breakdown-stat-label">Total Points</div>
+        <div class="breakdown-stat-label">Total Pts</div>
       </div>
       <div class="breakdown-stat">
-        <div class="breakdown-stat-val">${totalWins}</div>
+        <div class="breakdown-stat-val">${poolWins + bowlWins + golfWins}</div>
         <div class="breakdown-stat-label">Total Wins</div>
       </div>
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${poolWins}</div>
-        <div class="breakdown-stat-label">🎱 Pool Wins</div>
+        <div class="breakdown-stat-label">🎱 Pool</div>
       </div>
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${bowlWins}</div>
-        <div class="breakdown-stat-label">🎳 Bowl Wins</div>
+        <div class="breakdown-stat-label">🎳 Bowling</div>
       </div>
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${golfWins}</div>
-        <div class="breakdown-stat-label">⛳ Golf Wins</div>
+        <div class="breakdown-stat-label">⛳ Golf</div>
       </div>
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${fmtPts(bonusPts)}</div>
@@ -260,12 +212,11 @@ function buildBreakdownForPlayer(playerId) {
       </div>
       <div class="breakdown-stat">
         <div class="breakdown-stat-val">${fmtPts(dogPts)}</div>
-        <div class="breakdown-stat-label">Underdog Pts</div>
+        <div class="breakdown-stat-label">Underdog</div>
       </div>
     </div>
-
     <div class="section-label">Match by Match</div>
-    ${playerMatches.length
+    ${playerMatches.length && matchCards
       ? matchCards
       : '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches yet</div></div>'
     }`;
@@ -273,25 +224,28 @@ function buildBreakdownForPlayer(playerId) {
 
 async function init() {
   try {
-    const [cfgData, season, players] = await Promise.all([DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()]);
-    cfg           = cfgData;
-    activeSeason  = season;
-    allPlayers    = players;
-
-    const [szn, matches] = await Promise.all([
-      DB.getSeasonStandings(season.id),
-      DB.getAllMatchesDesc(season.id),
+    const [cfgData, season, players] = await Promise.all([
+      DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()
     ]);
-    seasonStandings = szn;
-    allMatches      = matches;
+    cfg = cfgData; activeSeason = season; allPlayers = players;
+
+    const [szn, allM] = await Promise.all([
+      DB.getSeasonStandings(season.id),
+      DB.getAllMatchesAsc(season.id),
+    ]);
+    seasonStandings  = szn;
+    allMatchesSorted = allM;
+
+    // Replay all matches through engine for accurate per-match breakdowns
+    replayAllMatches();
 
     // Build player tabs
     const tabBar = document.getElementById('player-tabs');
     tabBar.innerHTML = players.map(p => {
-      const photoHtml = p.photo_url
+      const ph = p.photo_url
         ? `<div class="tab-avatar"><img src="${p.photo_url}" onerror="this.parentNode.innerHTML='${initials(p.name)}'"></div>`
         : `<div class="tab-avatar">${initials(p.name)}</div>`;
-      return `<button class="player-tab" data-id="${p.id}">${photoHtml}${p.name}</button>`;
+      return `<button class="player-tab" data-id="${p.id}">${ph}${p.name}</button>`;
     }).join('');
 
     tabBar.addEventListener('click', e => {
@@ -303,7 +257,6 @@ async function init() {
       buildBreakdownForPlayer(activePlayerId);
     });
 
-    // Select first player by default
     if (players.length) {
       activePlayerId = players[0].id;
       tabBar.querySelector('.player-tab')?.classList.add('active');
@@ -318,7 +271,9 @@ async function init() {
       `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px">${err.message}</div></div>`;
   }
 }
+
 init();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') init(); });
 </script>
 </body>
 </html>
