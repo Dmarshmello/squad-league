@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Points Breakdown — Squad League</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .player-tab-bar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .player-tab {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface-solid);
+      cursor: pointer;
+      font-size: 13px; font-weight: 500;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .player-tab:hover { color: var(--text); }
+    .player-tab.active { background: var(--text); color: #fff; border-color: var(--text); }
+    .player-tab .tab-avatar {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--bg2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      overflow: hidden;
+    }
+    .player-tab .tab-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .breakdown-header {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .breakdown-stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: center;
+    }
+    .breakdown-stat-val {
+      font-family: var(--font-display);
+      font-size: 28px; color: var(--text);
+    }
+    .breakdown-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+    .match-breakdown-item {
+      background: var(--surface-solid);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+    .match-breakdown-item:hover { box-shadow: var(--shadow-md); }
+    .match-breakdown-top {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .match-breakdown-detail {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .match-breakdown-item.expanded .match-breakdown-detail { display: block; }
+    .breakdown-calc-row {
+      display: flex; justify-content: space-between;
+      padding: 4px 0;
+      color: var(--text2);
+    }
+    .breakdown-calc-row.total {
+      font-weight: 700; color: var(--accent-dark);
+      border-top: 1px solid var(--border);
+      margin-top: 6px; padding-top: 8px;
+    }
+    .breakdown-calc-row .neg { color: var(--danger); }
+    .breakdown-calc-row .pos { color: var(--accent-dark); }
+  </style>
+</head>
+<body>
+<div class="loading-screen" id="loader">
+  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+</div>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Dashboard</a>
+    <a class="nav-link active" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link" href="history.html">History</a>
+    <a class="nav-link" href="rules.html">Rules</a>
+    <a class="nav-link" href="settings.html">Settings</a>
+  </div>
+  <a class="nav-submit" href="submit.html">+ Submit Match</a>
+</nav>
+
+<main class="page" id="main" style="opacity:0">
+  <div class="page-title">Points <span>Breakdown</span></div>
+  <div class="page-subtitle">Exactly how every point was earned — click a match to expand</div>
+
+  <div class="player-tab-bar" id="player-tabs"></div>
+  <div id="breakdown-content">
+    <div class="empty"><div class="empty-icon">📊</div><div class="empty-text">Loading...</div></div>
+  </div>
+</main>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/engine.js"></script>
+<script>
+
+let allPlayers = [], allMatches = [], seasonStandings = [], weekStandings = [];
+let activeSeason = null, cfg = null;
+let activePlayerId = null;
+
+function buildBreakdownForPlayer(playerId) {
+  const player = allPlayers.find(p => p.id === playerId);
+  if (!player) return;
+
+  const content = document.getElementById('breakdown-content');
+
+  // Get season row
+  const sznRow = seasonStandings.find(r => r.player_id === playerId) || {};
+  const totalPts   = parseFloat(sznRow.total    || 0);
+  const poolPts    = parseFloat(sznRow.pool     || 0);
+  const bowlPts    = parseFloat(sznRow.bowling  || 0);
+  const golfPts    = parseFloat(sznRow.golf     || 0);
+  const bonusPts   = parseFloat(sznRow.bonus    || 0);
+  const dogPts     = parseFloat(sznRow.underdog || 0);
+  const poolWins   = sznRow.pool_wins    || 0;
+  const bowlWins   = sznRow.bowling_wins || 0;
+  const golfWins   = sznRow.golf_wins    || 0;
+  const totalWins  = poolWins + bowlWins + golfWins;
+
+  // Get matches this player was involved in
+  const playerMatches = allMatches.filter(m =>
+    !m.deleted && (m.match_placements||[]).some(p => p.player_id === playerId)
+  );
+
+  // Build per-match breakdown
+  const matchCards = playerMatches.map(match => {
+    const pl = (match.match_placements||[]).sort((a,b) => a.position - b.position);
+    const myPlacement = pl.find(p => p.player_id === playerId);
+    if (!myPlacement) return '';
+
+    const myPos   = myPlacement.position;
+    const sport   = match.sport;
+    const isWinner = myPos === 1;
+    const others  = pl.filter(p => p.player_id !== playerId).map(p => p.players?.name).filter(Boolean);
+
+    // Reconstruct what points this player likely earned in this match
+    // We show approximate breakdown from what we know
+    const lines = [];
+    let matchTotal = 0;
+
+    if (sport === 'Pool' && isWinner) {
+      lines.push({ label: `Pool win (base)`, val: fmtPts(cfg.poolWinPts) });
+      matchTotal += cfg.poolWinPts;
+    } else if ((sport === 'Bowling' || sport === 'Golf') && myPos === 1) {
+      lines.push({ label: `${sport} 1st place (base)`, val: fmtPts(cfg.firstPts) });
+      matchTotal += cfg.firstPts;
+    } else if ((sport === 'Bowling' || sport === 'Golf') && myPos === 2) {
+      lines.push({ label: `${sport} 2nd place (base)`, val: fmtPts(cfg.secondPts) });
+      matchTotal += cfg.secondPts;
+    } else {
+      lines.push({ label: `No points (position ${myPos})`, val: '0' });
+    }
+
+    // Note: exact multipliers would need full engine replay per match
+    // We show what we can derive simply
+    const isUnderdog = cfg.currentUnderdogs?.includes(player.name);
+    if (isUnderdog && matchTotal > 0) {
+      const bonus = round2(matchTotal * (cfg.underdogMultiplier - 1));
+      lines.push({ label: `Underdog multiplier (×${cfg.underdogMultiplier})`, val: '+' + fmtPts(bonus), pos: true });
+      matchTotal = round2(matchTotal * cfg.underdogMultiplier);
+    }
+
+    const kingId = allPlayers.find(p => p.name === cfg.currentKing)?.id;
+    const facedKing = pl.some(p => p.player_id === kingId && p.position !== myPos);
+    if (facedKing && isWinner) {
+      lines.push({ label: `King slay bonus`, val: '+' + fmtPts(cfg.kingSlay), pos: true });
+      matchTotal += cfg.kingSlay;
+    }
+
+    const linesHtml = lines.map(l => `
+      <div class="breakdown-calc-row">
+        <span>${l.label}</span>
+        <span class="${l.pos ? 'pos' : ''}">${l.val}</span>
+      </div>`).join('');
+
+    return `
+      <div class="match-breakdown-item" onclick="this.classList.toggle('expanded')">
+        <div class="match-breakdown-top">
+          <div class="match-sport-badge ${sport.toLowerCase()}" style="flex-shrink:0">${SPORT_EMOJI[sport]||'🎯'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px">${sport}${match.pool_mode?' · '+match.pool_mode:''}</div>
+            <div style="font-size:12px;color:var(--muted)">
+              Wk ${match.week} · ${fmtDate(match.match_date||match.created_at)}
+              · vs ${others.join(', ')||'—'}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-family:var(--font-display);font-size:20px;color:var(--accent-dark)">
+              ${myPos === 1 || myPos === 2 ? '+' + fmtPts(matchTotal) : '0'}
+            </div>
+            <div style="font-size:11px;color:var(--muted)">pts</div>
+          </div>
+        </div>
+        <div class="match-breakdown-detail">
+          ${linesHtml}
+          <div class="breakdown-calc-row total">
+            <span>Match total</span>
+            <span>${fmtPts(matchTotal)} pts</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px">
+            ↕ Tap to collapse · Upset multipliers applied at time of match based on rankings
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="breakdown-header">
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${fmtPts(totalPts)}</div>
+        <div class="breakdown-stat-label">Total Points</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${totalWins}</div>
+        <div class="breakdown-stat-label">Total Wins</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${poolWins}</div>
+        <div class="breakdown-stat-label">🎱 Pool Wins</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${bowlWins}</div>
+        <div class="breakdown-stat-label">🎳 Bowl Wins</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${golfWins}</div>
+        <div class="breakdown-stat-label">⛳ Golf Wins</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${fmtPts(bonusPts)}</div>
+        <div class="breakdown-stat-label">Bonus Pts</div>
+      </div>
+      <div class="breakdown-stat">
+        <div class="breakdown-stat-val">${fmtPts(dogPts)}</div>
+        <div class="breakdown-stat-label">Underdog Pts</div>
+      </div>
+    </div>
+
+    <div class="section-label">Match by Match</div>
+    ${playerMatches.length
+      ? matchCards
+      : '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches yet</div></div>'
+    }`;
+}
+
+async function init() {
+  try {
+    const [cfgData, season, players] = await Promise.all([DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()]);
+    cfg           = cfgData;
+    activeSeason  = season;
+    allPlayers    = players;
+
+    const [szn, matches] = await Promise.all([
+      DB.getSeasonStandings(season.id),
+      DB.getAllMatchesDesc(season.id),
+    ]);
+    seasonStandings = szn;
+    allMatches      = matches;
+
+    // Build player tabs
+    const tabBar = document.getElementById('player-tabs');
+    tabBar.innerHTML = players.map(p => {
+      const photoHtml = p.photo_url
+        ? `<div class="tab-avatar"><img src="${p.photo_url}" onerror="this.parentNode.innerHTML='${initials(p.name)}'"></div>`
+        : `<div class="tab-avatar">${initials(p.name)}</div>`;
+      return `<button class="player-tab" data-id="${p.id}">${photoHtml}${p.name}</button>`;
+    }).join('');
+
+    tabBar.addEventListener('click', e => {
+      const tab = e.target.closest('.player-tab');
+      if (!tab) return;
+      tabBar.querySelectorAll('.player-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activePlayerId = tab.dataset.id;
+      buildBreakdownForPlayer(activePlayerId);
+    });
+
+    // Select first player by default
+    if (players.length) {
+      activePlayerId = players[0].id;
+      tabBar.querySelector('.player-tab')?.classList.add('active');
+      buildBreakdownForPlayer(activePlayerId);
+    }
+
+    document.getElementById('loader').classList.add('hidden');
+    const main = document.getElementById('main');
+    main.style.opacity = '1'; main.style.transition = 'opacity 0.4s';
+  } catch (err) {
+    document.getElementById('loader').innerHTML =
+      `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px">${err.message}</div></div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

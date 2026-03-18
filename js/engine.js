@@ -1,22 +1,36 @@
 // ============================================================
-//  engine.js — Scoring engine (all rules)
+//  engine.js — Scoring engine + full recalculation
 // ============================================================
 
 const Engine = {
 
-  // Build rank map: { playerId: rank } — rank 1 = best
-  buildRankMap(seasonStandings, allPlayerIds) {
+  // Build rank map from season standings array
+  buildRankMap(seasonStandings, allPlayers) {
     const rankMap = {};
-    // standings already sorted by total desc
-    seasonStandings.forEach((row, i) => {
-      rankMap[row.player_id || row.players?.id] = i + 1;
+    const sorted = [...seasonStandings].sort((a, b) => (b.total || 0) - (a.total || 0));
+    sorted.forEach((row, i) => {
+      const pid = row.player_id || row.players?.id;
+      if (pid) rankMap[pid] = i + 1;
     });
-    // Players with no points yet get lowest rank
-    const maxRank = seasonStandings.length + 1;
-    allPlayerIds.forEach(id => {
-      if (rankMap[id] === undefined) rankMap[id] = maxRank;
-    });
+    const maxRank = sorted.length + 1;
+    allPlayers.forEach(p => { if (!rankMap[p.id]) rankMap[p.id] = maxRank; });
     return rankMap;
+  },
+
+  // Get all players tied at lowest score — returns array of player ids
+  getUnderdogIds(seasonStandings, allPlayers) {
+    const totals = {};
+    allPlayers.forEach(p => { totals[p.id] = 0; });
+    seasonStandings.forEach(r => {
+      const pid = r.player_id || r.players?.id;
+      if (pid !== undefined) totals[pid] = parseFloat(r.total) || 0;
+    });
+    const values = Object.values(totals);
+    if (!values.length) return [];
+    const lowest = Math.min(...values);
+    return Object.entries(totals)
+      .filter(([, v]) => v === lowest)
+      .map(([id]) => id);
   },
 
   getUpsetMultiplier(winnerId, opponentIds, rankMap, upsetFactor) {
@@ -32,8 +46,8 @@ const Engine = {
     return best;
   },
 
-  applyUnderdogMultiplier(playerId, basePoints, underdogId, multiplier) {
-    if (playerId === underdogId) {
+  applyUnderdogMultiplier(playerId, basePoints, underdogIds, multiplier) {
+    if (underdogIds.includes(playerId)) {
       const final = round2(basePoints * multiplier);
       return { finalPoints: final, bonusOnly: round2(final - basePoints) };
     }
@@ -47,7 +61,6 @@ const Engine = {
 
   shouldReduceForFarm(winsThisWeek, maxFullWins, winnerIds, loserIds, rankMap) {
     if (winsThisWeek <= maxFullWins) return false;
-    // Exception: if any winner is still below any loser, no reduction
     for (const wId of winnerIds) {
       for (const lId of loserIds) {
         if ((rankMap[wId] || 999) > (rankMap[lId] || 999)) return false;
@@ -56,115 +69,189 @@ const Engine = {
     return true;
   },
 
-  // ── CALCULATE POINTS FOR A MATCH ──────────────────────────
-  // Returns: { [playerId]: { pool, bowling, golf, bonus, underdog } }
-  async calculate(sport, poolMode, placements, cfg, season, rankMap, allPlayerIds) {
-    // placements: [{ playerId, position }] sorted by position
+  // ── CALCULATE POINTS FOR ONE MATCH ──────────────────────────
+  // processedSoFar = matches already counted this week (for anti-farm in-memory)
+  calcMatch(match, cfg, rankMap, underdogIds, processedSoFar, allPlayerIds) {
     const points = {};
     allPlayerIds.forEach(id => {
-      points[id] = { pool: 0, bowling: 0, golf: 0, bonus: 0, underdog: 0 };
+      points[id] = { pool: 0, bowling: 0, golf: 0, bonus: 0, underdog: 0, wins: 0, pool_wins: 0, bowling_wins: 0, golf_wins: 0 };
     });
 
-    const underdogId = cfg.currentUnderdog
-      ? allPlayerIds.find(id => id === cfg.currentUnderdogId) || null
-      : null;
+    const sport    = match.sport;
+    const poolMode = match.pool_mode;
+    const placements = (match.match_placements || []).sort((a, b) => a.position - b.position);
+    const kingId   = allPlayerIds.find ? undefined : null; // resolved below
 
     if (sport === 'Pool') {
-      await Engine._calcPool(placements, poolMode, cfg, season, rankMap, points, underdogId);
+      this._calcPool(match, placements, poolMode, cfg, rankMap, underdogIds, points, processedSoFar, allPlayerIds);
     } else if (sport === 'Bowling' || sport === 'Golf') {
-      Engine._calcRanked(sport, placements, cfg, rankMap, points, underdogId);
+      this._calcRanked(sport, placements, cfg, rankMap, underdogIds, points);
     }
-
     return points;
   },
 
-  async _calcPool(placements, poolMode, cfg, season, rankMap, points, underdogId) {
-    // Sort by position
-    const sorted = [...placements].sort((a, b) => a.position - b.position);
-
+  _calcPool(match, placements, poolMode, cfg, rankMap, underdogIds, points, processedSoFar, allPlayerIds) {
     let winnerGroup = [];
     let loserGroup  = [];
 
+    const byPos = {};
+    placements.forEach(p => { byPos[p.position] = p.player_id; });
+
     if (poolMode === 'Singles') {
-      winnerGroup = sorted.slice(0, 1).map(p => p.playerId);
-      loserGroup  = sorted.slice(1, 2).map(p => p.playerId);
+      if (byPos[1]) winnerGroup.push(byPos[1]);
+      if (byPos[2]) loserGroup.push(byPos[2]);
     } else if (poolMode === '2v2') {
-      winnerGroup = sorted.slice(0, 2).map(p => p.playerId);
-      loserGroup  = sorted.slice(2, 4).map(p => p.playerId);
+      if (byPos[1]) winnerGroup.push(byPos[1]);
+      if (byPos[2]) winnerGroup.push(byPos[2]);
+      if (byPos[3]) loserGroup.push(byPos[3]);
+      if (byPos[4]) loserGroup.push(byPos[4]);
     } else if (poolMode === '2v1') {
-      // position 1 = winner side (could be 1 or 2 people)
-      // positions marked: 1,2 = winners, 3,4 = losers OR 1 = winner, 2,3 = losers
-      const pos1 = sorted.filter(p => p.position === 1).map(p => p.playerId);
-      const pos2 = sorted.filter(p => p.position === 2).map(p => p.playerId);
-      const pos3plus = sorted.filter(p => p.position >= 3).map(p => p.playerId);
-      // If there are 2 "winners" (positions 1&2 on same side) use pos3 as losers
-      // The form sends: p1=winner1, p2=winner2(blank if 1 winner), p3=opp1, p4=opp2
-      // We handle this by checking how many placements are at positions 1-2
-      winnerGroup = sorted.filter(p => p.position <= 2 && p.isWinner).map(p => p.playerId);
-      loserGroup  = sorted.filter(p => !p.isWinner).map(p => p.playerId);
-      // Fallback to positions if isWinner not set
-      if (!winnerGroup.length) {
-        winnerGroup = pos1;
-        loserGroup  = [...pos2, ...pos3plus];
+      if (byPos[1]) winnerGroup.push(byPos[1]);
+      // position 2 is optional second winner
+      const p2isWinner = match._p2isWinner;
+      if (byPos[2] && p2isWinner) {
+        winnerGroup.push(byPos[2]);
+        if (byPos[3]) loserGroup.push(byPos[3]);
+        if (byPos[4]) loserGroup.push(byPos[4]);
+      } else {
+        if (byPos[2]) loserGroup.push(byPos[2]);
+        if (byPos[3]) loserGroup.push(byPos[3]);
       }
     } else {
-      // Fallback singles
-      winnerGroup = sorted.slice(0, 1).map(p => p.playerId);
-      loserGroup  = sorted.slice(1).map(p => p.playerId);
+      // default singles fallback
+      if (byPos[1]) winnerGroup.push(byPos[1]);
+      placements.slice(1).forEach(p => loserGroup.push(p.player_id));
     }
 
+    winnerGroup = winnerGroup.filter(Boolean);
+    loserGroup  = loserGroup.filter(Boolean);
     if (!winnerGroup.length || !loserGroup.length) return;
 
-    // Anti-farm check
-    const winsThisWeek = await DB.countWinsVsSide(
-      season.id, cfg.currentWeek, 'Pool', winnerGroup, loserGroup
-    );
-    const reduce = Engine.shouldReduceForFarm(
-      winsThisWeek, cfg.maxFullWins, winnerGroup, loserGroup, rankMap
-    );
-    const base = reduce ? cfg.reducedPts : cfg.poolWinPts;
+    const winsThisWeek = DB.countWinsVsSideInMemory(processedSoFar, match.week, 'Pool', winnerGroup, loserGroup);
+    const reduce = this.shouldReduceForFarm(winsThisWeek, cfg.maxFullWins, winnerGroup, loserGroup, rankMap);
+    const base   = reduce ? cfg.reducedPts : cfg.poolWinPts;
 
-    // Upset multiplier (best across winners)
     let bestUpset = 1;
     winnerGroup.forEach(wId => {
-      const m = Engine.getUpsetMultiplier(wId, loserGroup, rankMap, cfg.upsetFactor);
+      const m = this.getUpsetMultiplier(wId, loserGroup, rankMap, cfg.upsetFactor);
       if (m > bestUpset) bestUpset = m;
     });
 
-    const sidePoints   = round2(base * bestUpset);
-    const perWinner    = round2(sidePoints / winnerGroup.length);
-    const kingBonus    = Engine.getKingBonus(loserGroup, cfg.currentKingId, cfg.kingSlay);
-    const kingEach     = round2(kingBonus / winnerGroup.length);
+    const sidePoints = round2(base * bestUpset);
+    const perWinner  = round2(sidePoints / winnerGroup.length);
+    const kingBonus  = this.getKingBonus(loserGroup, cfg._kingId, cfg.kingSlay);
+    const kingEach   = round2(kingBonus / winnerGroup.length);
 
     winnerGroup.forEach(wId => {
       if (!points[wId]) return;
-      const ud = Engine.applyUnderdogMultiplier(wId, perWinner, underdogId, cfg.underdogMultiplier);
-      points[wId].pool     += round2(ud.finalPoints + kingEach);
-      points[wId].bonus    += round2(kingEach + (perWinner - (base / winnerGroup.length)));
-      points[wId].underdog += round2(ud.bonusOnly);
+      const ud = this.applyUnderdogMultiplier(wId, perWinner, underdogIds, cfg.underdogMultiplier);
+      points[wId].pool      += round2(ud.finalPoints + kingEach);
+      points[wId].bonus     += round2(kingEach + (perWinner - (base / winnerGroup.length)));
+      points[wId].underdog  += round2(ud.bonusOnly);
+      points[wId].wins      += 1;
+      points[wId].pool_wins += 1;
     });
   },
 
-  _calcRanked(sport, placements, cfg, rankMap, points, underdogId) {
-    const sorted    = [...placements].sort((a, b) => a.position - b.position);
-    const winnerId  = sorted[0]?.playerId;
-    const secondId  = sorted[1]?.playerId;
-    const opponents = sorted.slice(1).map(p => p.playerId);
-
+  _calcRanked(sport, placements, cfg, rankMap, underdogIds, points) {
+    const key      = sport.toLowerCase();
+    const winnerId = placements[0]?.player_id;
+    const secondId = placements[1]?.player_id;
+    const opponents = placements.slice(1).map(p => p.player_id).filter(Boolean);
     if (!winnerId || !points[winnerId]) return;
 
-    const key       = sport.toLowerCase();
-    const kingBonus = Engine.getKingBonus(opponents, underdogId?.kingId, cfg.kingSlay);
-    const upsetMult = Engine.getUpsetMultiplier(winnerId, opponents, rankMap, cfg.upsetFactor);
+    const kingBonus = this.getKingBonus(opponents, cfg._kingId, cfg.kingSlay);
+    const upsetMult = this.getUpsetMultiplier(winnerId, opponents, rankMap, cfg.upsetFactor);
     const firstBase = round2(cfg.firstPts * upsetMult);
-    const ud        = Engine.applyUnderdogMultiplier(winnerId, firstBase, underdogId, cfg.underdogMultiplier);
+    const ud        = this.applyUnderdogMultiplier(winnerId, firstBase, underdogIds, cfg.underdogMultiplier);
 
-    points[winnerId][key]     += round2(ud.finalPoints + kingBonus);
-    points[winnerId].bonus    += round2(kingBonus + (firstBase - cfg.firstPts));
-    points[winnerId].underdog += round2(ud.bonusOnly);
+    points[winnerId][key]          += round2(ud.finalPoints + kingBonus);
+    points[winnerId].bonus         += round2(kingBonus + (firstBase - cfg.firstPts));
+    points[winnerId].underdog      += round2(ud.bonusOnly);
+    points[winnerId].wins          += 1;
+    points[winnerId][key + '_wins'] = (points[winnerId][key + '_wins'] || 0) + 1;
 
     if (secondId && points[secondId]) {
       points[secondId][key] += cfg.secondPts;
+    }
+  },
+
+  // ── FULL RECALCULATION ───────────────────────────────────────
+  // Replays all non-deleted matches in chronological order
+  // fromWeek: only clear/rebuild from this week onward
+  async fullRecalc(seasonId, fromWeek, allMatches, allPlayers, cfg) {
+    // Clear points from fromWeek onward
+    await DB.clearPointsFromWeek(seasonId, fromWeek);
+
+    // Sort all matches by date asc
+    const sorted = [...allMatches]
+      .filter(m => !m.deleted)
+      .sort((a, b) => {
+        const da = new Date(a.match_date || a.created_at);
+        const db2 = new Date(b.match_date || b.created_at);
+        return da - db2;
+      });
+
+    const allPlayerIds = allPlayers.map(p => p.id);
+
+    // We need to track running season totals to compute rank/underdog at each match
+    // Split into: before fromWeek (already in DB) and fromWeek+ (to replay)
+    const beforeMatches = sorted.filter(m => m.week < fromWeek);
+    const replayMatches = sorted.filter(m => m.week >= fromWeek);
+
+    // Build initial season state from matches BEFORE fromWeek
+    // We do this by replaying them all in memory
+    const runningTotals = {}; // playerId -> { pool, bowling, golf, bonus, underdog, total, wins, pool_wins, bowling_wins, golf_wins }
+    allPlayerIds.forEach(id => {
+      runningTotals[id] = { pool: 0, bowling: 0, golf: 0, bonus: 0, underdog: 0, total: 0, wins: 0, pool_wins: 0, bowling_wins: 0, golf_wins: 0 };
+    });
+
+    // Load existing season points for weeks before fromWeek if they exist
+    const { data: existingSeasonPts } = await db.from('season_points')
+      .select('*').eq('season_id', seasonId);
+    // Actually for simplicity, replay everything from scratch
+    // Clear ALL and replay ALL
+    await DB.clearAllPoints(seasonId);
+
+    const processedSoFar = [];
+
+    for (const match of sorted) {
+      // Build current rank map from running totals
+      const standingsArr = allPlayerIds.map(id => ({
+        player_id: id,
+        total: runningTotals[id].total,
+      }));
+      const rankMap     = this.buildRankMap(standingsArr, allPlayers);
+      const underdogIds = this.getUnderdogIds(standingsArr, allPlayers);
+
+      // Attach king id to cfg
+      const cfgWithKing = { ...cfg };
+      if (cfg.currentKing) {
+        const kingPlayer = allPlayers.find(p => p.name === cfg.currentKing);
+        cfgWithKing._kingId = kingPlayer?.id || null;
+      }
+
+      const pts = this.calcMatch(match, cfgWithKing, rankMap, underdogIds, processedSoFar, allPlayerIds);
+
+      // Write to DB
+      for (const [playerId, delta] of Object.entries(pts)) {
+        const total = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
+        if (total !== 0 || delta.wins > 0) {
+          await DB.upsertWeekPoints(seasonId, match.week, playerId, delta);
+          await DB.upsertSeasonPoints(seasonId, playerId, delta);
+          // Update running totals
+          Object.keys(delta).forEach(k => {
+            runningTotals[playerId][k] = (runningTotals[playerId][k] || 0) + (delta[k] || 0);
+          });
+          runningTotals[playerId].total = round2(
+            runningTotals[playerId].pool + runningTotals[playerId].bowling +
+            runningTotals[playerId].golf + runningTotals[playerId].bonus +
+            runningTotals[playerId].underdog
+          );
+        }
+      }
+
+      processedSoFar.push(match);
     }
   },
 };

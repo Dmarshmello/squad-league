@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
 <div class="loading-screen" id="loader">
   <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
@@ -17,10 +16,12 @@
   <a class="nav-logo" href="index.html">SQUAD<span>LEAGUE</span></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Dashboard</a>
-    <a class="nav-link" href="history.html">Match History</a>
+    <a class="nav-link" href="breakdown.html">Points Breakdown</a>
+    <a class="nav-link" href="history.html">History</a>
     <a class="nav-link" href="rules.html">Rules</a>
+    <a class="nav-link" href="settings.html">Settings</a>
   </div>
-  <a class="nav-submit active" href="submit.html">+ Submit Match</a>
+  <a class="nav-submit" href="submit.html">+ Submit Match</a>
 </nav>
 
 <main class="page" id="main" style="opacity:0">
@@ -28,8 +29,6 @@
   <div class="page-subtitle">Record a result — points are calculated automatically</div>
 
   <div class="form-wrap">
-
-    <!-- Step indicator -->
     <div class="step-indicator">
       <div class="step-dot active" id="dot-1">1</div>
       <div class="step-line" id="line-1"></div>
@@ -38,7 +37,7 @@
       <div class="step-dot" id="dot-3">3</div>
     </div>
 
-    <!-- STEP 1: Sport -->
+    <!-- STEP 1: Sport + Date -->
     <div class="form-step active" id="step-1">
       <div class="form-card">
         <div class="form-title">What sport?</div>
@@ -59,7 +58,6 @@
           </div>
         </div>
 
-        <!-- Pool mode (only shown for Pool) -->
         <div id="pool-mode-wrap" class="hidden mt-24">
           <div class="form-subtitle">Choose the match format</div>
           <div class="mode-picker">
@@ -78,7 +76,17 @@
           </div>
         </div>
 
-        <div class="btn-row mt-24">
+        <!-- Date picker -->
+        <div class="field mt-24">
+          <label class="field-label">Match Date</label>
+          <input class="field-input" type="date" id="match-date">
+          <div id="week-preview" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+          <div id="past-warning" class="hidden" style="font-size:12px;color:#f59e0b;margin-top:4px;padding:8px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2)">
+            ⚠️ Past date — points will be recalculated from this week forward to maintain accuracy.
+          </div>
+        </div>
+
+        <div class="btn-row mt-16">
           <button class="btn btn-primary btn-full" id="step1-next" disabled>Continue →</button>
         </div>
       </div>
@@ -89,14 +97,11 @@
       <div class="form-card">
         <div class="form-title" id="step2-title">Who played?</div>
         <div class="form-subtitle" id="step2-sub">Select players in finishing order</div>
-
         <div class="placement-list" id="placement-list"></div>
-
         <div class="field mt-24">
           <label class="field-label">Notes (optional)</label>
-          <input class="field-input" type="text" id="match-notes" placeholder="Any notes about the match...">
+          <input class="field-input" type="text" id="match-notes" placeholder="Any notes...">
         </div>
-
         <div class="btn-row mt-8">
           <button class="btn btn-secondary" id="step2-back">← Back</button>
           <button class="btn btn-primary" id="step2-next" style="flex:1" disabled>Review →</button>
@@ -106,11 +111,8 @@
 
     <!-- STEP 3: Confirm -->
     <div class="form-step" id="step-3">
-      <div class="form-card" id="confirm-card">
-        <!-- Rendered by JS -->
-      </div>
+      <div class="form-card" id="confirm-card"></div>
     </div>
-
   </div>
 </main>
 
@@ -123,59 +125,73 @@
 <script>
 
 let state = {
-  sport: null,
-  poolMode: null,
-  placements: [],  // [{ playerId, playerName, position, isWinner }]
-  players: [],
-  allPlayerIds: [],
-  cfg: null,
-  season: null,
-  seasonStandings: [],
-  currentStep: 1,
+  sport: null, poolMode: null, placements: [],
+  players: [], allPlayerIds: [],
+  cfg: null, season: null, seasonStandings: [],
+  matchDate: null, matchWeek: null, isPast: false,
 };
 
-// ── TOAST ─────────────────────────────────────────────────────
-function toast(msg, type = '') {
-  const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  el.textContent = msg;
-  document.getElementById('toasts').appendChild(el);
-  setTimeout(() => el.remove(), 3500);
-}
-
-// ── STEPS ─────────────────────────────────────────────────────
 function goStep(n) {
   document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
   document.getElementById(`step-${n}`).classList.add('active');
-  state.currentStep = n;
-
   for (let i = 1; i <= 3; i++) {
-    const dot  = document.getElementById(`dot-${i}`);
+    document.getElementById(`dot-${i}`).classList.toggle('active', i === n);
+    document.getElementById(`dot-${i}`).classList.toggle('done', i < n);
     const line = document.getElementById(`line-${i}`);
-    dot.classList.toggle('active', i === n);
-    dot.classList.toggle('done',   i < n);
     if (line) line.classList.toggle('done', i < n);
   }
 }
 
-// ── STEP 1 ────────────────────────────────────────────────────
+// ── DATE HANDLING ─────────────────────────────────────────────
+function updateDateDisplay() {
+  const dateInput = document.getElementById('match-date');
+  const val = dateInput.value;
+  if (!val) return;
+
+  const matchDate = new Date(val + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  state.matchDate = val;
+  state.isPast = matchDate < today;
+
+  const seasonStart = state.cfg?.seasonStart || val;
+  state.matchWeek = getWeekNumber(matchDate, new Date(seasonStart));
+
+  document.getElementById('week-preview').textContent = `→ Week ${state.matchWeek}`;
+  document.getElementById('past-warning').classList.toggle('hidden', !state.isPast);
+  checkStep1Valid();
+}
+
+function checkStep1Valid() {
+  const hasSport = !!state.sport;
+  const hasMode  = state.sport !== 'Pool' || !!state.poolMode;
+  const hasDate  = !!state.matchDate;
+  document.getElementById('step1-next').disabled = !(hasSport && hasMode && hasDate);
+}
+
+// Set default date to today
+function setDefaultDate() {
+  const today = toISODate(new Date());
+  document.getElementById('match-date').value = today;
+  updateDateDisplay();
+}
+
+document.getElementById('match-date').addEventListener('change', updateDateDisplay);
+
 document.querySelectorAll('.sport-option').forEach(el => {
   el.addEventListener('click', () => {
     document.querySelectorAll('.sport-option').forEach(e => e.classList.remove('selected'));
     el.classList.add('selected');
     state.sport = el.dataset.sport;
-
-    const poolWrap = document.getElementById('pool-mode-wrap');
+    const pw = document.getElementById('pool-mode-wrap');
     if (state.sport === 'Pool') {
-      poolWrap.classList.remove('hidden');
+      pw.classList.remove('hidden');
       state.poolMode = null;
       document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
-      document.getElementById('step1-next').disabled = true;
     } else {
-      poolWrap.classList.add('hidden');
+      pw.classList.add('hidden');
       state.poolMode = null;
-      document.getElementById('step1-next').disabled = false;
     }
+    checkStep1Valid();
   });
 });
 
@@ -184,142 +200,106 @@ document.querySelectorAll('.mode-option').forEach(el => {
     document.querySelectorAll('.mode-option').forEach(e => e.classList.remove('selected'));
     el.classList.add('selected');
     state.poolMode = el.dataset.mode;
-    document.getElementById('step1-next').disabled = false;
+    checkStep1Valid();
   });
 });
 
-document.getElementById('step1-next').addEventListener('click', () => {
-  buildPlacementUI();
-  goStep(2);
-});
+document.getElementById('step1-next').addEventListener('click', () => { buildPlacementUI(); goStep(2); });
 
 // ── STEP 2 ────────────────────────────────────────────────────
 function buildPlacementUI() {
   const list  = document.getElementById('placement-list');
   const sport = state.sport;
   const mode  = state.poolMode;
-
-  let slots = [];
+  let slots   = [];
 
   if (sport === 'Pool') {
     if (mode === 'Singles') {
-      slots = [
-        { label: '1st / Winner', pos: 1, isWinner: true },
-        { label: '2nd / Loser',  pos: 2, isWinner: false },
-      ];
+      slots = [{ label: 'Winner', pos: 1 }, { label: 'Loser', pos: 2 }];
     } else if (mode === '2v2') {
       slots = [
-        { label: 'Winner 1',  pos: 1, isWinner: true  },
-        { label: 'Winner 2',  pos: 2, isWinner: true  },
-        { label: 'Loser 1',   pos: 3, isWinner: false },
-        { label: 'Loser 2',   pos: 4, isWinner: false },
+        { label: 'Winner 1', pos: 1 }, { label: 'Winner 2', pos: 2 },
+        { label: 'Loser 1',  pos: 3 }, { label: 'Loser 2',  pos: 4 },
       ];
     } else if (mode === '2v1') {
       slots = [
-        { label: 'Winner 1',         pos: 1, isWinner: true  },
-        { label: 'Winner 2 (if 2v1)',pos: 2, isWinner: true, optional: true },
-        { label: 'Loser 1',          pos: 3, isWinner: false },
-        { label: 'Loser 2 (if 2v1)', pos: 4, isWinner: false, optional: true },
+        { label: 'Winner 1',              pos: 1 },
+        { label: 'Winner 2 (if 2 winners)', pos: 2, optional: true },
+        { label: 'Loser 1',               pos: 3 },
+        { label: 'Loser 2 (if 2 losers)', pos: 4, optional: true },
       ];
     }
     document.getElementById('step2-title').textContent = `Pool — ${mode}`;
     document.getElementById('step2-sub').textContent   = 'Select winners and losers';
   } else {
-    // Bowling / Golf
-    const max = state.players.length;
-    slots = [
-      { label: '1st Place',  pos: 1 },
-      { label: '2nd Place',  pos: 2 },
-    ];
-    for (let i = 3; i <= Math.min(max, 6); i++) {
-      slots.push({ label: `${i}${['rd','th','th','th'][i-3]||'th'} Place`, pos: i, optional: true });
-    }
+    const ordinals = ['1st','2nd','3rd','4th','5th','6th'];
+    const max = Math.min(state.players.length, 6);
+    slots = ordinals.slice(0, max).map((o, i) => ({
+      label: `${o} Place`, pos: i + 1, optional: i >= 2,
+    }));
     document.getElementById('step2-title').textContent = sport;
     document.getElementById('step2-sub').textContent   = 'Select players in finishing order';
   }
 
-  const playerOptions = state.players.map(p =>
-    `<option value="${p.id}">${p.name}</option>`
-  ).join('');
+  const opts = `<option value="">— select —</option>` +
+    state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
   list.innerHTML = slots.map(slot => `
     <div class="placement-row">
       <div class="placement-pos ${slot.pos <= 2 ? 'pos-'+slot.pos : ''}">${slot.pos}</div>
       <div class="placement-label">${slot.label}</div>
-      <select class="placement-select" data-pos="${slot.pos}" data-winner="${slot.isWinner||false}" data-optional="${slot.optional||false}">
-        <option value="">— ${slot.optional ? 'optional' : 'select'} —</option>
-        ${playerOptions}
+      <select class="placement-select"
+        data-pos="${slot.pos}"
+        data-optional="${slot.optional || false}">
+        ${slot.optional ? '<option value="">— optional —</option>' : ''}
+        ${slot.optional ? state.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('') : opts}
       </select>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  // Watch selects for validation
-  list.querySelectorAll('.placement-select').forEach(sel => {
-    sel.addEventListener('change', validateStep2);
-  });
+  list.querySelectorAll('.placement-select').forEach(s => s.addEventListener('change', validateStep2));
   validateStep2();
 }
 
 function validateStep2() {
-  const selects = document.querySelectorAll('#placement-list .placement-select');
-  const required = [...selects].filter(s => s.dataset.optional !== 'true');
+  const selects  = [...document.querySelectorAll('#placement-list .placement-select')];
+  const required = selects.filter(s => s.dataset.optional !== 'true');
   const allFilled = required.every(s => s.value);
-
-  // Check no duplicates
-  const vals = [...selects].map(s => s.value).filter(Boolean);
+  const vals   = selects.map(s => s.value).filter(Boolean);
   const unique = new Set(vals).size === vals.length;
-
   document.getElementById('step2-next').disabled = !allFilled || !unique;
-  if (!unique) toast('Each player can only appear once', 'error');
 }
 
 document.getElementById('step2-back').addEventListener('click', () => goStep(1));
-
 document.getElementById('step2-next').addEventListener('click', () => {
-  const selects = document.querySelectorAll('#placement-list .placement-select');
-  state.placements = [...selects]
-    .filter(s => s.value)
-    .map(s => ({
-      playerId:  s.value,
-      playerName: state.players.find(p => p.id === s.value)?.name || '?',
-      position:  parseInt(s.dataset.pos),
-      isWinner:  s.dataset.winner === 'true',
-    }));
+  const selects = [...document.querySelectorAll('#placement-list .placement-select')];
+  state.placements = selects.filter(s => s.value).map(s => ({
+    playerId:   s.value,
+    playerName: state.players.find(p => p.id === s.value)?.name || '?',
+    position:   parseInt(s.dataset.pos),
+  }));
   buildConfirmUI();
   goStep(3);
 });
 
-// ── STEP 3: CONFIRM ───────────────────────────────────────────
+// ── STEP 3 ────────────────────────────────────────────────────
 function buildConfirmUI() {
-  const card = document.getElementById('confirm-card');
-  const sport = state.sport;
-  const mode  = state.poolMode;
-
-  const sorted = [...state.placements].sort((a,b) => a.position - b.position);
-
-  const confirmRows = sorted.map(p => `
-    <div class="confirm-row">
-      <div class="confirm-pos">${p.position}</div>
-      <div class="confirm-name">${p.playerName}</div>
-      ${p.isWinner !== undefined ? `<span class="tag ${p.isWinner?'tag-king':'text-muted'}" style="margin-left:auto">${p.isWinner?'Winner':'Loser'}</span>` : ''}
-    </div>
-  `).join('');
+  const card   = document.getElementById('confirm-card');
+  const sorted = [...state.placements].sort((a, b) => a.position - b.position);
 
   card.innerHTML = `
     <div class="form-title">Confirm Match</div>
-    <div class="form-subtitle">${sport}${mode ? ' · '+mode : ''}</div>
-
-    <div class="confirm-list">${confirmRows}</div>
-
-    <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:14px;font-size:13px;color:var(--muted);margin-bottom:20px">
-      ⚡ Points will be calculated with upset bonus, underdog multiplier, and king slay rules applied automatically.
+    <div class="form-subtitle">${state.sport}${state.poolMode?' · '+state.poolMode:''} · ${state.matchDate} · Week ${state.matchWeek}</div>
+    ${state.isPast ? `<div style="font-size:12px;color:#f59e0b;padding:10px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.2);margin-bottom:16px">⚠️ Past date — all points will be recalculated from Week ${state.matchWeek}</div>` : ''}
+    <div class="confirm-list">
+      ${sorted.map(p => `
+        <div class="confirm-row">
+          <div class="confirm-pos">${p.position}</div>
+          <div class="confirm-name">${p.playerName}</div>
+        </div>`).join('')}
     </div>
-
-    <div class="btn-row">
+    <div class="btn-row mt-16">
       <button class="btn btn-secondary" id="step3-back">← Back</button>
-      <button class="btn btn-accent" id="step3-submit" style="flex:1">
-        🏆 Submit Match
-      </button>
+      <button class="btn btn-accent" id="step3-submit" style="flex:1">🏆 Submit Match</button>
     </div>`;
 
   document.getElementById('step3-back').addEventListener('click', () => goStep(2));
@@ -333,117 +313,107 @@ async function submitMatch() {
   btn.textContent = 'Submitting...';
 
   try {
-    const { cfg, season, placements, sport, poolMode, seasonStandings, allPlayerIds } = state;
+    const { cfg, season, placements, sport, poolMode, matchDate, matchWeek, isPast, allPlayerIds, players, seasonStandings } = state;
 
-    // 1. Insert match
-    const match = await DB.insertMatch(season.id, cfg.currentWeek, sport, poolMode,
-      document.getElementById('match-notes')?.value || '');
+    // Insert match
+    const match = await DB.insertMatch(season.id, matchWeek, sport, poolMode,
+      document.getElementById('match-notes')?.value || '', matchDate);
 
-    // 2. Insert placements
+    // Insert placements
     await DB.insertPlacements(match.id, placements.map(p => ({
-      playerId: p.playerId,
-      position: p.position,
+      playerId: p.playerId, position: p.position,
     })));
 
-    // 3. Build rank map
-    const rankMap = Engine.buildRankMap(seasonStandings, allPlayerIds);
+    if (isPast) {
+      // Full recalc from this week
+      btn.textContent = 'Recalculating points...';
+      const allMatches = await DB.getAllMatchesOrdered(season.id);
+      await Engine.fullRecalc(season.id, matchWeek, allMatches, players, cfg);
+      showSuccess(null, true);
+    } else {
+      // Normal single-match point calc
+      const rankMap     = Engine.buildRankMap(seasonStandings, players);
+      const underdogIds = Engine.getUnderdogIds(seasonStandings, players);
+      const cfgWithKing = { ...cfg };
+      const kingPlayer  = players.find(p => p.name === cfg.currentKing);
+      cfgWithKing._kingId = kingPlayer?.id || null;
 
-    // Add king/underdog IDs to cfg
-    cfg.currentKingId     = state.players.find(p => p.name === cfg.currentKing)?.id     || null;
-    cfg.currentUnderdogId = state.players.find(p => p.name === cfg.currentUnderdog)?.id || null;
+      const processedSoFar = [];
+      const pts = Engine.calcMatch(
+        { ...match, match_placements: placements.map(p => ({ player_id: p.playerId, position: p.position })) },
+        cfgWithKing, rankMap, underdogIds, processedSoFar, allPlayerIds
+      );
 
-    // 4. Calculate points
-    const points = await Engine.calculate(
-      sport, poolMode, placements, cfg, season, rankMap, allPlayerIds
-    );
-
-    // 5. Write points
-    for (const [playerId, delta] of Object.entries(points)) {
-      const total = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
-      if (total !== 0) {
-        await DB.upsertWeekPoints(season.id, cfg.currentWeek, playerId, delta);
-        await DB.upsertSeasonPoints(season.id, playerId, delta);
+      for (const [playerId, delta] of Object.entries(pts)) {
+        const total = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
+        if (total !== 0 || delta.wins > 0) {
+          await DB.upsertWeekPoints(season.id, matchWeek, playerId, delta);
+          await DB.upsertSeasonPoints(season.id, playerId, delta);
+        }
       }
+      showSuccess(pts, false);
     }
-
-    // 6. Show success
-    showSuccess(points);
-
   } catch (err) {
     console.error(err);
-    toast('Error submitting match: ' + err.message, 'error');
-    btn.disabled = false;
-    btn.textContent = '🏆 Submit Match';
+    showToast('Error: ' + err.message, 'error');
+    const btn2 = document.getElementById('step3-submit');
+    if (btn2) { btn2.disabled = false; btn2.textContent = '🏆 Submit Match'; }
   }
 }
 
-function showSuccess(points) {
+function showSuccess(points, wasRecalc) {
   const card = document.getElementById('confirm-card');
-
-  // Build points chips for players who earned something
-  const chips = Object.entries(points)
-    .filter(([, d]) => round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog) > 0)
-    .map(([playerId, d]) => {
-      const total  = round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog);
-      const player = state.players.find(p => p.id === playerId);
-      return `<div class="pts-chip"><span class="pts-name">${player?.name||'?'}</span><span class="pts-val">+${fmtPts(total)} pts</span></div>`;
-    }).join('');
+  let chipsHtml = '';
+  if (points) {
+    const chips = Object.entries(points)
+      .filter(([, d]) => round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog) > 0)
+      .map(([pid, d]) => {
+        const total  = round2(d.pool+d.bowling+d.golf+d.bonus+d.underdog);
+        const player = state.players.find(p => p.id === pid);
+        return `<div class="pts-chip"><span class="pts-name">${player?.name||'?'}</span><span class="pts-val">+${fmtPts(total)} pts</span></div>`;
+      }).join('');
+    chipsHtml = chips ? `<div class="points-earned">${chips}</div>` : '';
+  }
 
   card.innerHTML = `
     <div class="success-card">
       <div class="success-icon">🏆</div>
       <div class="success-title">Match Recorded!</div>
-      <div class="success-sub">Points have been updated on the leaderboard</div>
-      ${chips ? `<div class="points-earned">${chips}</div>` : ''}
+      <div class="success-sub">${wasRecalc ? 'Points recalculated from that week forward' : 'Points updated on the leaderboard'}</div>
+      ${chipsHtml}
       <div class="btn-row" style="justify-content:center">
         <a class="btn btn-primary" href="index.html">← Dashboard</a>
         <button class="btn btn-secondary" onclick="resetForm()">Submit Another</button>
       </div>
     </div>`;
-
-  // Reset step dots
-  document.getElementById('dot-1').classList.remove('active','done');
-  document.getElementById('dot-2').classList.remove('active','done');
-  document.getElementById('dot-3').classList.add('done');
-  document.getElementById('dot-3').classList.remove('active');
 }
 
 function resetForm() {
   state.sport = null; state.poolMode = null; state.placements = [];
+  state.matchDate = null; state.matchWeek = null; state.isPast = false;
   document.querySelectorAll('.sport-option,.mode-option').forEach(e => e.classList.remove('selected'));
   document.getElementById('step1-next').disabled = true;
   document.getElementById('pool-mode-wrap').classList.add('hidden');
+  setDefaultDate();
   goStep(1);
 }
 
-// ── INIT ──────────────────────────────────────────────────────
 async function init() {
   try {
-    const [cfg, season, players] = await Promise.all([
-      DB.getConfig(),
-      DB.getActiveSeason(),
-      DB.getPlayers(),
-    ]);
-
+    const [cfg, season, players] = await Promise.all([DB.getConfig(), DB.getActiveSeason(), DB.getPlayers()]);
     const seasonStandings = await DB.getSeasonStandings(season.id);
-
-    state.cfg             = cfg;
-    state.season          = season;
-    state.players         = players;
-    state.allPlayerIds    = players.map(p => p.id);
+    state.cfg = cfg; state.season = season; state.players = players;
+    state.allPlayerIds = players.map(p => p.id);
     state.seasonStandings = seasonStandings;
-
+    setDefaultDate();
     document.getElementById('loader').classList.add('hidden');
     const main = document.getElementById('main');
-    main.style.opacity = '1';
-    main.style.transition = 'opacity 0.4s';
-
-  } catch(err) {
+    main.style.opacity = '1'; main.style.transition = 'opacity 0.4s';
+  } catch (err) {
     document.getElementById('loader').innerHTML =
       `<div style="text-align:center;padding:40px"><div style="font-size:32px">⚠️</div><div style="margin-top:12px;font-weight:600">Could not load</div><div style="font-size:13px;color:var(--muted);margin-top:6px">${err.message}</div></div>`;
   }
 }
-
 init();
 </script>
 </body>
