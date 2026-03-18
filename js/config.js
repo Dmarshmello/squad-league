@@ -5,8 +5,8 @@
 
 // ── SUPABASE CREDENTIALS ─────────────────────────────────────
 // Find these in: Supabase dashboard → Settings → API
-const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
+const SUPABASE_URL  = 'https://aotztjkfsrhproewrtue.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvdHp0amtmc3JocHJvZXdydHVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MjMwODEsImV4cCI6MjA4OTM5OTA4MX0.VdnJY5_dnHsx4VtGewe3o_WOO_WMlHWfikdH0ezqfIY';
 
 // ── SUPABASE CLIENT ──────────────────────────────────────────
 const { createClient } = supabase;
