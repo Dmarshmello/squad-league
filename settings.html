@@ -9,8 +9,10 @@
 <body>
 
 <div class="loading-screen" id="loader">
-  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-logo">SHOOTING<span>BLANKS</span></div>
+  <div class="loading-tagline">Welcome to the Shooting Blanks League</div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  <div class="loading-dev">Developed by Dmarshmello</div>
 </div>
 
 <nav class="nav">
@@ -47,7 +49,7 @@
         <input class="field-input" type="text" id="season-name">
       </div>
       <div class="field">
-        <label class="field-label">Monthly Reward</label>
+        <label class="field-label">6-Month Reward</label>
         <input class="field-input" type="text" id="monthly-reward">
       </div>
       <div class="field">
@@ -166,11 +168,11 @@
 <footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
 
 <nav class="nav-mobile-links">
-  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
-  <a class="nav-mobile-link" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
-  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
-  <a class="nav-mobile-link active" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
-  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+  <a class="nav-mobile-link" href="index.html">Dashboard</a>
+  <a class="nav-mobile-link" href="breakdown.html">Breakdown</a>
+  <a class="nav-mobile-link" href="history.html">History</a>
+  <a class="nav-mobile-link active" href="settings.html">Settings</a>
+  <a class="nav-mobile-link submit-mob" href="submit.html">+ Submit</a>
 </nav>
 
 <div class="toast-container" id="toasts"></div>
@@ -243,7 +245,7 @@ function renderProfiles() {
 
 function loadForm(cfg, season) {
   document.getElementById('season-name').value    = season.name || '';
-  document.getElementById('monthly-reward').value = season.monthly_reward || '';
+  document.getElementById('monthly-reward').value = season.six_month_reward || '';
   document.getElementById('season-start').value   = cfg.seasonStart || (season.start_date ? toISODate(new Date(season.start_date)) : '');
   document.getElementById('season-end').value     = cfg.seasonEnd   || (season.end_date   ? toISODate(new Date(season.end_date))   : '');
   document.getElementById('pool-win-pts').value   = cfg.poolWinPts;
@@ -279,7 +281,7 @@ document.getElementById('save-season').addEventListener('click', async () => {
     const end   = document.getElementById('season-end').value;
     await DB.updateSeason(activeSeason.id, {
       name: document.getElementById('season-name').value,
-      monthly_reward: document.getElementById('monthly-reward').value,
+      six_month_reward: document.getElementById('monthly-reward').value,
       start_date: start || null,
       end_date:   end   || null,
     });
@@ -350,7 +352,7 @@ document.getElementById('run-reset').addEventListener('click', async () => {
       DB.setConfig('current_week',     String(newWeek)),
     ];
     if (bestPlayer) saves.push(DB.setConfig('current_king', bestPlayer));
-    if (cfg.currentWeek % 4 === 0 && bestPlayer) saves.push(DB.setConfig('monthly_king', bestPlayer));
+    if (cfg.currentWeek % 26 === 0 && bestPlayer) saves.push(DB.setConfig('monthly_king', bestPlayer));
     await Promise.all(saves);
 
     const newCfg = await DB.getConfig();
