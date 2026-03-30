@@ -265,45 +265,197 @@ function renderRecentMatches(matches) {
   }).join('');
 }
 
-function shareStandings() {
-  const week   = document.getElementById('hero-week')?.textContent || '?';
-  const king   = document.getElementById('hero-king')?.textContent || 'TBD';
-  const rows   = document.querySelectorAll('#leaderboard .player-row');
+async function shareStandings() {
+  const week = document.getElementById('hero-week')?.textContent || '?';
+  const king = document.getElementById('hero-king')?.textContent || 'TBD';
+  const rows = [...document.querySelectorAll('#leaderboard .player-row')];
 
-  const medals = ['🥇','🥈','🥉'];
-  let board = '';
-  rows.forEach((row, i) => {
-    const name   = row.querySelector('.player-name')?.textContent?.trim() || '?';
-    const pts    = row.querySelector('.pts-num')?.textContent?.trim()     || '0';
-    const medal  = medals[i] || `${i+1}.`;
-    board += `${medal} ${name} — ${pts} pts\n`;
+  const players = rows.map((row, i) => ({
+    rank:   i + 1,
+    name:   row.querySelector('.player-name')?.textContent?.trim() || '?',
+    pts:    row.querySelector('.pts-num')?.textContent?.trim()     || '0',
+    unit:   row.querySelector('.pts-unit')?.textContent?.trim()    || 'pts',
+    tags:   [...row.querySelectorAll('.tag')].map(t => t.textContent.trim()),
+  }));
+
+  const canvas = document.createElement('canvas');
+  const dpr    = Math.min(window.devicePixelRatio || 2, 3);
+  const W      = 420;
+  const rowH   = 56;
+  const headerH = 140;
+  const footerH = 52;
+  const H      = headerH + players.length * rowH + footerH;
+
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // ── BACKGROUND ──────────────────────────────────────────────
+  ctx.fillStyle = '#0d0f14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle green glow top left
+  const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 260);
+  grd.addColorStop(0, 'rgba(0,229,176,0.07)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── HEADER ──────────────────────────────────────────────────
+  // Title
+  ctx.fillStyle = '#f0f2f8';
+  ctx.font = `bold ${28}px 'Arial', sans-serif`;
+  ctx.fillText('SHOOTING BLANKS', 24, 44);
+
+  // Green underline accent
+  ctx.fillStyle = '#00c99a';
+  ctx.fillRect(24, 52, 180, 2);
+
+  // Week pill
+  const pillText = `Week ${week}`;
+  ctx.font = `600 ${12}px 'Arial', sans-serif`;
+  const pillW = ctx.measureText(pillText).width + 20;
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  roundRect(ctx, 24, 62, pillW, 22, 11);
+  ctx.fill();
+  ctx.fillStyle = '#9da3ba';
+  ctx.fillText(pillText, 34, 77);
+
+  // King line
+  ctx.fillStyle = '#f59e0b';
+  ctx.font = `600 ${14}px 'Arial', sans-serif`;
+  ctx.fillText(`👑  King: ${king}`, 24, 116);
+
+  // Divider
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillRect(24, 128, W - 48, 1);
+
+  // ── PLAYER ROWS ─────────────────────────────────────────────
+  const medals  = ['🥇','🥈','🥉'];
+  const rankClr = ['#00c99a','#a5b4fc','#f59e0b'];
+  const rowBg   = ['rgba(0,229,176,0.07)','rgba(124,108,250,0.06)','rgba(245,158,11,0.06)'];
+
+  players.forEach((p, i) => {
+    const y = headerH + i * rowH;
+
+    // Row background for top 3
+    if (i < 3) {
+      ctx.fillStyle = rowBg[i];
+      roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 12);
+      ctx.fill();
+    }
+
+    // Rank badge
+    ctx.fillStyle = i < 3 ? rankClr[i] : '#555a70';
+    ctx.font      = `bold ${i < 3 ? 18 : 15}px 'Arial', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(medals[i] || String(p.rank), 36, y + rowH / 2 + 6);
+    ctx.textAlign = 'left';
+
+    // Name
+    ctx.fillStyle = '#f0f2f8';
+    ctx.font      = `600 ${15}px 'Arial', sans-serif`;
+    ctx.fillText(p.name, 58, y + rowH / 2 + 2);
+
+    // Tags (king/underdog)
+    let tagX = 58 + ctx.measureText(p.name).width + 10;
+    p.tags.forEach(tag => {
+      if (tag.includes('King')) {
+        ctx.fillStyle = 'rgba(245,158,11,0.18)';
+        const tw = ctx.measureText('👑').width + 10;
+        roundRect(ctx, tagX, y + rowH/2 - 9, tw, 16, 8);
+        ctx.fill();
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = `600 ${10}px 'Arial', sans-serif`;
+        ctx.fillText('👑', tagX + 4, y + rowH/2 + 2);
+        tagX += tw + 4;
+      } else if (tag.includes('Underdog')) {
+        ctx.fillStyle = 'rgba(124,108,250,0.18)';
+        const tw = ctx.measureText('⚡').width + 10;
+        roundRect(ctx, tagX, y + rowH/2 - 9, tw, 16, 8);
+        ctx.fill();
+        ctx.fillStyle = '#a5b4fc';
+        ctx.font = `600 ${10}px 'Arial', sans-serif`;
+        ctx.fillText('⚡', tagX + 4, y + rowH/2 + 2);
+        tagX += tw + 4;
+      }
+      ctx.font = `600 ${15}px 'Arial', sans-serif`;
+    });
+
+    // Points — right aligned
+    ctx.fillStyle = i === 0 ? '#00c99a' : '#f0f2f8';
+    ctx.font      = `bold ${18}px 'Arial', sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.fillText(p.pts, W - 42, y + rowH / 2 + 2);
+    ctx.fillStyle = '#555a70';
+    ctx.font      = `400 ${10}px 'Arial', sans-serif`;
+    ctx.fillText(p.unit, W - 24, y + rowH / 2 + 2);
+    ctx.textAlign = 'left';
+
+    // Row divider
+    if (i < players.length - 1) {
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(24, y + rowH - 1, W - 48, 1);
+    }
   });
 
-  const msg =
-    `🏆 *SHOOTING BLANKS — Week ${week}*\n` +
-    `👑 King: ${king}\n\n` +
-    `*Season Standings*\n` +
-    board +
-    `\n📊 Full stats: ${window.location.origin}${window.location.pathname}`;
+  // ── FOOTER ──────────────────────────────────────────────────
+  const fy = headerH + players.length * rowH + 16;
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillRect(24, fy, W - 48, 1);
+  ctx.fillStyle = '#555a70';
+  ctx.font      = `400 ${11}px 'Arial', sans-serif`;
+  ctx.fillText('shootingblanks.squad', 24, fy + 24);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#00c99a';
+  ctx.fillText('SQUAD LEAGUE', W - 24, fy + 24);
+  ctx.textAlign = 'left';
 
-  navigator.clipboard.writeText(msg).then(() => {
-    const btn = document.getElementById('share-btn');
-    btn.innerHTML = '<span class="share-icon">✓</span> Copied!';
-    btn.classList.add('share-btn-success');
-    setTimeout(() => {
-      btn.innerHTML = '<span class="share-icon">↗</span> Share';
-      btn.classList.remove('share-btn-success');
-    }, 2000);
-  }).catch(() => {
-    // Fallback for older browsers
-    const ta = document.createElement('textarea');
-    ta.value = msg;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast('Copied to clipboard!', 'success');
-  });
+  // ── SHARE ───────────────────────────────────────────────────
+  canvas.toBlob(async (blob) => {
+    const file = new File([blob], 'shooting-blanks.png', { type: 'image/png' });
+    const url  = URL.createObjectURL(blob);
+
+    // Try Web Share API (native share sheet on mobile)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Shooting Blanks — Week ${week}`,
+          text:  `Season standings after Week ${week}. 👑 King: ${king}`,
+        });
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return; // user cancelled
+      }
+    }
+
+    // Fallback: download the image
+    const a  = document.createElement('a');
+    a.href   = url;
+    a.download = `shooting-blanks-wk${week}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Image saved!', 'success');
+  }, 'image/png');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 async function loadDashboard() {
