@@ -9,10 +9,8 @@
 <body>
 
 <div class="loading-screen" id="loader">
-  <div class="loading-logo">SHOOTING<span>BLANKS</span></div>
-  <div class="loading-tagline">Welcome to the Shooting Blanks League</div>
+  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
-  <div class="loading-dev">Developed by Dmarshmello</div>
 </div>
 
 <nav class="nav">
@@ -29,13 +27,16 @@
 
 <main class="page" id="main" style="opacity:0">
 
-  <div class="dashboard-header">
-    <div class="dashboard-season-name" id="dashboard-season-name">Shooting Blanks</div>
-  </div>
-  <div class="dashboard-pills">
-    <div class="pill"><span class="live-dot"></span>Week <b id="hero-week">—</b></div>
-    <div class="pill">👑 <b id="hero-king">TBD</b></div>
-    <div class="pill">⚡ <b id="hero-dog">TBD</b></div>
+  <div class="hero">
+    <div class="hero-left">
+      <div class="hero-eyebrow"><span class="pulse"></span> Live Season</div>
+      <div class="hero-title">SHOOTING<br><span class="accent">BLANKS</span></div>
+      <div class="hero-pills">
+        <div class="pill">Week <b id="hero-week">—</b></div>
+        <div class="pill">👑 King: <b id="hero-king">TBD</b></div>
+        <div class="pill">⚡ Underdog: <b id="hero-dog">TBD</b></div>
+      </div>
+    </div>
   </div>
 
   <div id="king-section"></div>
@@ -104,11 +105,11 @@
 <footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
 
 <nav class="nav-mobile-links">
-  <a class="nav-mobile-link active" href="index.html">Dashboard</a>
-  <a class="nav-mobile-link" href="breakdown.html">Breakdown</a>
-  <a class="nav-mobile-link" href="history.html">History</a>
-  <a class="nav-mobile-link" href="settings.html">Settings</a>
-  <a class="nav-mobile-link submit-mob" href="submit.html">+ Submit</a>
+  <a class="nav-mobile-link active" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
+  <a class="nav-mobile-link" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
+  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
+  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
+  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
 </nav>
 
 <div class="toast-container" id="toasts"></div>
@@ -147,13 +148,7 @@ function renderLeaderboard(standings, allPlayers, cfg) {
     player_id: p.id, players: p, total: 0, wins: 0,
     pool_wins: 0, bowling_wins: 0, golf_wins: 0
   }));
-  // Sort by total wins desc, then by total points as tiebreaker
-  const rows = [...standings, ...extra].sort((a, b) => {
-    const aWins = (a.pool_wins||0) + (a.bowling_wins||0) + (a.golf_wins||0);
-    const bWins = (b.pool_wins||0) + (b.bowling_wins||0) + (b.golf_wins||0);
-    if (bWins !== aWins) return bWins - aWins;
-    return (b.total||0) - (a.total||0);
-  });
+  const rows = [...standings, ...extra];
 
   if (!rows.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div><div class="empty-text">No matches yet!</div></div>';
@@ -283,8 +278,6 @@ async function loadDashboard() {
     document.getElementById('hero-week').textContent = cfg.currentWeek;
     document.getElementById('hero-king').textContent = cfg.currentKing || 'TBD';
     document.getElementById('hero-dog').textContent  = cfg.currentUnderdogs?.join(', ') || 'TBD';
-    const snEl = document.getElementById('dashboard-season-name');
-    if (snEl) snEl.textContent = season.name || 'Shooting Blanks';
 
     renderKing(cfg.currentKing, seasonStandings, cfg, players);
     renderSportLeaders(seasonStandings);
