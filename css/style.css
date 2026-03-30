@@ -1181,3 +1181,36 @@ body::before {
   margin-top: 5px;
   flex-wrap: wrap;
 }
+
+/* ── SHARE BUTTON ────────────────────────────────────────────── */
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.share-btn:hover {
+  border-color: var(--accent-dark);
+  color: var(--accent-dark);
+  background: rgba(0,229,176,0.06);
+}
+.share-btn-success {
+  border-color: var(--accent-dark) !important;
+  color: var(--accent-dark) !important;
+  background: rgba(0,229,176,0.1) !important;
+}
+.share-icon {
+  font-size: 14px;
+  line-height: 1;
+}
