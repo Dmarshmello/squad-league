@@ -1135,3 +1135,39 @@ body::before {
   z-index: 1;
 }
 .site-footer span { color: var(--accent-dark); }
+
+/* ── SPORT WIN TAGS ─────────────────────────────────────────── */
+.tag-sport-pool { background: rgba(0,212,170,0.12); color: var(--pool);    border: 1px solid rgba(0,212,170,0.2); }
+.tag-sport-bowl { background: rgba(124,108,250,0.12); color: var(--bowling); border: 1px solid rgba(124,108,250,0.2); }
+.tag-sport-golf { background: rgba(56,189,248,0.12);  color: var(--golf);   border: 1px solid rgba(56,189,248,0.2); }
+
+/* ── PLAYER POINTS DETAIL ROW ───────────────────────────────── */
+.pts-detail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pts-detail-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.pts-detail-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.pts-detail-sep {
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0 3px;
+}
+.player-pts-detail {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}

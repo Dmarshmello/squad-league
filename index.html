@@ -40,29 +40,12 @@
 
   <div id="king-section"></div>
 
-  <div class="section-label mt-32">Sport Leaders</div>
-  <div class="stats-grid">
-    <div class="stat-card" data-sport="Pool">
-      <div class="stat-icon">🎱</div>
-      <div class="stat-label">Pool Wins</div>
-      <div class="stat-value" id="pool-leader">—</div>
-      <div class="stat-sub" id="pool-wins">0 wins</div>
-    </div>
-    <div class="stat-card" data-sport="Bowling">
-      <div class="stat-icon">🎳</div>
-      <div class="stat-label">Bowling Wins</div>
-      <div class="stat-value" id="bowling-leader">—</div>
-      <div class="stat-sub" id="bowling-wins">0 wins</div>
-    </div>
-    <div class="stat-card" data-sport="Golf">
-      <div class="stat-icon">⛳</div>
-      <div class="stat-label">Golf Wins</div>
-      <div class="stat-value" id="golf-leader">—</div>
-      <div class="stat-sub" id="golf-wins">0 wins</div>
-    </div>
+  <div class="section-label mt-24">Season Standings</div>
+  <div class="leaderboard" id="leaderboard">
+    <div class="empty"><div class="empty-icon">🏆</div><div class="empty-text">Loading...</div></div>
   </div>
 
-  <div class="prize-banner">
+  <div class="prize-banner mt-24">
     <div class="prize-icon">🍽️</div>
     <div class="prize-text">
       <div class="prize-title">Monthly Prize</div>
@@ -72,12 +55,6 @@
   </div>
 
   <div class="two-col">
-    <div class="col-section">
-      <div class="section-label">Season Standings — Wins</div>
-      <div class="leaderboard" id="leaderboard">
-        <div class="empty"><div class="empty-icon">🏆</div><div class="empty-text">Loading...</div></div>
-      </div>
-    </div>
     <div class="col-section">
       <div class="section-label">This Week — Points</div>
       <div class="card-solid" style="padding:20px;overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -91,8 +68,9 @@
           </tbody>
         </table>
       </div>
-
-      <div class="section-label mt-24">Recent Matches</div>
+    </div>
+    <div class="col-section">
+      <div class="section-label">Recent Matches</div>
       <div class="match-list" id="recent-matches">
         <div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">No matches yet</div></div>
       </div>
@@ -145,14 +123,15 @@ function renderLeaderboard(standings, allPlayers, cfg) {
   const seen = new Set(standings.map(r => r.player_id));
   const extra = allPlayers.filter(p => !seen.has(p.id)).map(p => ({
     player_id: p.id, players: p, total: 0, wins: 0,
+    pool: 0, bowling: 0, golf: 0, bonus: 0, underdog: 0,
     pool_wins: 0, bowling_wins: 0, golf_wins: 0
   }));
-  // Sort by total wins desc, then by total points as tiebreaker
+  // Sort by total points desc, wins as tiebreaker
   const rows = [...standings, ...extra].sort((a, b) => {
-    const aWins = (a.pool_wins||0) + (a.bowling_wins||0) + (a.golf_wins||0);
-    const bWins = (b.pool_wins||0) + (b.bowling_wins||0) + (b.golf_wins||0);
-    if (bWins !== aWins) return bWins - aWins;
-    return (b.total||0) - (a.total||0);
+    if ((b.total||0) !== (a.total||0)) return (b.total||0) - (a.total||0);
+    const aW = (a.pool_wins||0)+(a.bowling_wins||0)+(a.golf_wins||0);
+    const bW = (b.pool_wins||0)+(b.bowling_wins||0)+(b.golf_wins||0);
+    return bW - aW;
   });
 
   if (!rows.length) {
@@ -165,20 +144,26 @@ function renderLeaderboard(standings, allPlayers, cfg) {
     const player = row.players || allPlayers.find(p => p.id === row.player_id) || { name: '?' };
     const isKing = player.name === cfg.currentKing;
     const isDog  = cfg.currentUnderdogs && cfg.currentUnderdogs.includes(player.name);
+
     const pw = parseInt(row.pool_wins    || 0);
     const bw = parseInt(row.bowling_wins || 0);
     const gw = parseInt(row.golf_wins    || 0);
-    const totalWins = pw + bw + gw;
+    const totalWins  = pw + bw + gw;
+    const sportPts   = round2((row.pool||0) + (row.bowling||0) + (row.golf||0));
+    const bonusPts   = round2((row.bonus||0) + (row.underdog||0));
+    const totalPts   = round2(row.total || 0);
 
-    const tags = [
+    // Status tags
+    const statusTags = [
       isKing ? '<span class="tag tag-king">👑 King</span>' : '',
       isDog  ? '<span class="tag tag-dog">⚡ Underdog</span>' : '',
     ].filter(Boolean).join('');
 
-    const sportTags = [
-      pw > 0 ? `<span class="tag" style="background:rgba(0,212,170,0.1);color:#00897b">🎱 ${pw}W</span>` : '',
-      bw > 0 ? `<span class="tag" style="background:rgba(124,108,250,0.1);color:#5e35b1">🎳 ${bw}W</span>` : '',
-      gw > 0 ? `<span class="tag" style="background:rgba(56,189,248,0.1);color:#0277bd">⛳ ${gw}W</span>` : '',
+    // Win tags per sport
+    const winTags = [
+      pw > 0 ? `<span class="tag tag-sport-pool">🎱 ${pw}W</span>` : '',
+      bw > 0 ? `<span class="tag tag-sport-bowl">🎳 ${bw}W</span>` : '',
+      gw > 0 ? `<span class="tag tag-sport-golf">⛳ ${gw}W</span>` : '',
     ].filter(Boolean).join('');
 
     return `
@@ -187,12 +172,17 @@ function renderLeaderboard(standings, allPlayers, cfg) {
         ${avatarHtml(player)}
         <div class="player-meta">
           <div class="player-name">${player.name}</div>
-          ${tags   ? `<div class="player-tags">${tags}</div>` : ''}
-          ${sportTags ? `<div class="player-tags" style="margin-top:4px">${sportTags}</div>` : ''}
+          <div class="player-tags">
+            ${statusTags}${winTags}
+          </div>
+          <div class="player-pts-detail">
+            <span class="pts-detail-item"><span class="pts-detail-label">Win pts</span> <span class="pts-detail-val">${fmtPts(sportPts)}</span></span>
+            ${bonusPts > 0 ? `<span class="pts-detail-sep">+</span><span class="pts-detail-item"><span class="pts-detail-label">Bonus</span> <span class="pts-detail-val">${fmtPts(bonusPts)}</span></span>` : ''}
+          </div>
         </div>
         <div class="player-pts-block">
-          <div class="pts-num">${totalWins}</div>
-          <div class="pts-unit">wins</div>
+          <div class="pts-num">${fmtPts(totalPts)}</div>
+          <div class="pts-unit">pts</div>
         </div>
       </div>`;
   }).join('');
@@ -287,7 +277,7 @@ async function loadDashboard() {
     if (snEl) snEl.textContent = season.name || 'Shooting Blanks';
 
     renderKing(cfg.currentKing, seasonStandings, cfg, players);
-    renderSportLeaders(seasonStandings);
+
     document.getElementById('prize-king').textContent = cfg.monthlyKing || 'TBD — season in progress';
     document.getElementById('prize-desc').textContent = season.monthly_reward || 'Free meal for the monthly king';
     renderLeaderboard(seasonStandings, players, cfg);
