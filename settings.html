@@ -171,6 +171,7 @@
   <a class="nav-mobile-link" href="index.html">Dashboard</a>
   <a class="nav-mobile-link" href="breakdown.html">Breakdown</a>
   <a class="nav-mobile-link" href="history.html">History</a>
+  <a class="nav-mobile-link" href="rules.html">Rules</a>
   <a class="nav-mobile-link active" href="settings.html">Settings</a>
   <a class="nav-mobile-link submit-mob" href="submit.html">+ Submit</a>
 </nav>
@@ -245,7 +246,7 @@ function renderProfiles() {
 
 function loadForm(cfg, season) {
   document.getElementById('season-name').value    = season.name || '';
-  document.getElementById('monthly-reward').value = season.six_month_reward || '';
+  document.getElementById('monthly-reward').value = season.monthly_reward || '';
   document.getElementById('season-start').value   = cfg.seasonStart || (season.start_date ? toISODate(new Date(season.start_date)) : '');
   document.getElementById('season-end').value     = cfg.seasonEnd   || (season.end_date   ? toISODate(new Date(season.end_date))   : '');
   document.getElementById('pool-win-pts').value   = cfg.poolWinPts;
@@ -281,7 +282,7 @@ document.getElementById('save-season').addEventListener('click', async () => {
     const end   = document.getElementById('season-end').value;
     await DB.updateSeason(activeSeason.id, {
       name: document.getElementById('season-name').value,
-      six_month_reward: document.getElementById('monthly-reward').value,
+      monthly_reward: document.getElementById('monthly-reward').value,
       start_date: start || null,
       end_date:   end   || null,
     });
@@ -330,12 +331,11 @@ document.getElementById('run-reset').addEventListener('click', async () => {
 
   try {
     const cfg = await DB.getConfig();
-    const weekRows = await DB.getWeekStandings(activeSeason.id, cfg.currentWeek);
     const sznRows  = await DB.getSeasonStandings(activeSeason.id);
 
-    // Find king
+    // King = whoever tops the season leaderboard (most total points overall)
     let bestPlayer = '', bestPts = -Infinity;
-    weekRows.forEach(r => {
+    sznRows.forEach(r => {
       if ((r.total || 0) > bestPts) { bestPts = r.total; bestPlayer = r.players?.name || ''; }
     });
 
