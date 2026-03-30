@@ -9,8 +9,10 @@
 <body>
 
 <div class="loading-screen" id="loader">
-  <div class="loading-logo">SQUAD<span>LEAGUE</span></div>
+  <div class="loading-logo">SHOOTING<span>BLANKS</span></div>
+  <div class="loading-tagline">Welcome to the Shooting Blanks League</div>
   <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  <div class="loading-dev">Developed by Dmarshmello</div>
 </div>
 
 <nav class="nav">
@@ -37,11 +39,12 @@
 <footer class="site-footer">Developed by <span>Dmarshmello</span></footer>
 
 <nav class="nav-mobile-links">
-  <a class="nav-mobile-link" href="index.html"><span class="mob-icon">🏆</span>Dashboard</a>
-  <a class="nav-mobile-link active" href="breakdown.html"><span class="mob-icon">📊</span>Breakdown</a>
-  <a class="nav-mobile-link" href="history.html"><span class="mob-icon">📋</span>History</a>
-  <a class="nav-mobile-link" href="settings.html"><span class="mob-icon">⚙️</span>Settings</a>
-  <a class="nav-mobile-link" href="submit.html"><span class="mob-icon">➕</span>Submit</a>
+  <a class="nav-mobile-link" href="index.html">Dashboard</a>
+  <a class="nav-mobile-link active" href="breakdown.html">Breakdown</a>
+  <a class="nav-mobile-link" href="history.html">History</a>
+  <a class="nav-mobile-link" href="rules.html">Rules</a>
+  <a class="nav-mobile-link" href="settings.html">Settings</a>
+  <a class="nav-mobile-link submit-mob" href="submit.html">+ Submit</a>
 </nav>
 
 <div class="toast-container" id="toasts"></div>
@@ -65,6 +68,7 @@ function replayAllMatches() {
 
   const processedSoFar = [];
   matchBreakdowns = {};
+  const weekTotals = {}; // track per-week pts to derive king
 
   for (const match of allMatchesSorted) {
     if (match.deleted) continue;
@@ -73,19 +77,31 @@ function replayAllMatches() {
     const rankMap      = Engine.buildRankMap(standingsArr, allPlayers);
     const underdogIds  = Engine.getUnderdogIds(standingsArr, allPlayers);
 
-    const cfgNow = { ...cfg };
-    if (cfg.currentKing) {
-      const kp = allPlayers.find(p => p.name === cfg.currentKing);
-      cfgNow._kingId = kp ? kp.id : null;
+    // King = top scorer from previous week (week 1 has no king)
+    const cfgNow = { ...cfg, _kingId: null };
+    const prevWeek = match.week - 1;
+    if (prevWeek >= 1 && weekTotals[prevWeek]) {
+      let topId = null, topPts = -1;
+      Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
+        if (pts > topPts) { topPts = pts; topId = pid; }
+      });
+      cfgNow._kingId = topId || null;
     }
 
     const pts = Engine.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);
     matchBreakdowns[match.id] = pts;
 
-    // Update running totals
+    // Update running totals and week totals
     allPlayerIds.forEach(id => {
       const d = pts[id];
-      if (d) runningTotals[id] += round2(d.pool + d.bowling + d.golf + d.bonus + d.underdog);
+      if (d) {
+        const earned = round2(d.pool + d.bowling + d.golf + d.bonus + d.underdog);
+        runningTotals[id] += earned;
+        if (earned > 0) {
+          if (!weekTotals[match.week]) weekTotals[match.week] = {};
+          weekTotals[match.week][id] = round2((weekTotals[match.week][id] || 0) + earned);
+        }
+      }
     });
 
     processedSoFar.push(match);

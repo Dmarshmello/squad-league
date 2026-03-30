@@ -223,6 +223,10 @@ const Engine = {
 
     const processedSoFar = [];
 
+    // Track week points in memory to derive king per week
+    // weekTotals[week][playerId] = total pts that week
+    const weekTotals = {};
+
     for (const match of sorted) {
       // Build rank/underdog from totals at this point in time
       const standingsArr = allPlayerIds.map(id => ({
@@ -233,10 +237,16 @@ const Engine = {
       const rankMap     = this.buildRankMap(standingsArr, allPlayers);
       const underdogIds = this.getUnderdogIds(standingsArr, allPlayers);
 
-      const cfgNow = { ...cfg };
-      if (cfg.currentKing) {
-        const kp = allPlayers.find(p => p.name === cfg.currentKing);
-        cfgNow._kingId = kp ? kp.id : null;
+      // Derive king for THIS match: whoever scored highest in the previous week
+      // Week 1 has no king. Week N uses the top scorer from week N-1.
+      const cfgNow = { ...cfg, _kingId: null };
+      const prevWeek = match.week - 1;
+      if (prevWeek >= 1 && weekTotals[prevWeek]) {
+        let topId = null, topPts = -1;
+        Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
+          if (pts > topPts) { topPts = pts; topId = pid; }
+        });
+        cfgNow._kingId = topId || null;
       }
 
       const pts = this.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);
@@ -260,6 +270,12 @@ const Engine = {
           rt.bowling_wins += delta.bowling_wins || 0;
           rt.golf_wins    += delta.golf_wins    || 0;
           rt.total = round2(rt.pool + rt.bowling + rt.golf + rt.bonus + rt.underdog);
+
+          // Track per-week totals for king derivation
+          if (!weekTotals[match.week]) weekTotals[match.week] = {};
+          weekTotals[match.week][playerId] = round2(
+            (weekTotals[match.week][playerId] || 0) + earned
+          );
         }
       }
 
