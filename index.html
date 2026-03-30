@@ -269,177 +269,193 @@ async function shareStandings() {
   const week = document.getElementById('hero-week')?.textContent || '?';
   const king = document.getElementById('hero-king')?.textContent || 'TBD';
   const rows = [...document.querySelectorAll('#leaderboard .player-row')];
+  const siteUrl = window.location.href.split('?')[0];
 
   const players = rows.map((row, i) => ({
-    rank:   i + 1,
-    name:   row.querySelector('.player-name')?.textContent?.trim() || '?',
-    pts:    row.querySelector('.pts-num')?.textContent?.trim()     || '0',
-    unit:   row.querySelector('.pts-unit')?.textContent?.trim()    || 'pts',
-    tags:   [...row.querySelectorAll('.tag')].map(t => t.textContent.trim()),
+    rank: i + 1,
+    name: row.querySelector('.player-name')?.textContent?.trim() || '?',
+    pts:  row.querySelector('.pts-num')?.textContent?.trim()     || '0',
+    tags: [...row.querySelectorAll('.tag')].map(t => t.textContent.trim()),
   }));
 
-  const canvas = document.createElement('canvas');
-  const dpr    = Math.min(window.devicePixelRatio || 2, 3);
-  const W      = 420;
-  const rowH   = 56;
-  const headerH = 140;
-  const footerH = 52;
-  const H      = headerH + players.length * rowH + footerH;
+  const dpr  = Math.min(window.devicePixelRatio || 2, 3);
+  const W    = 460;
+  const rowH = 62;
+  const padT = 160;
+  const H    = padT + players.length * rowH + 32;
 
+  const canvas  = document.createElement('canvas');
   canvas.width  = W * dpr;
   canvas.height = H * dpr;
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
-
-  const ctx = canvas.getContext('2d');
+  const ctx     = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
   // ── BACKGROUND ──────────────────────────────────────────────
-  ctx.fillStyle = '#0d0f14';
+  // Deep dark base
+  ctx.fillStyle = '#080a0f';
   ctx.fillRect(0, 0, W, H);
 
-  // Subtle green glow top left
-  const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 260);
-  grd.addColorStop(0, 'rgba(0,229,176,0.07)');
-  grd.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, W, H);
+  // Multi-point gradient mesh
+  const g1 = ctx.createRadialGradient(0, 0, 0, 0, 0, 320);
+  g1.addColorStop(0, 'rgba(0,229,176,0.10)');
+  g1.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
+
+  const g2 = ctx.createRadialGradient(W, H, 0, W, H, 300);
+  g2.addColorStop(0, 'rgba(124,108,250,0.09)');
+  g2.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+
+  const g3 = ctx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.3, 200);
+  g3.addColorStop(0, 'rgba(245,158,11,0.04)');
+  g3.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g3; ctx.fillRect(0, 0, W, H);
+
+  // Subtle grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+  ctx.lineWidth   = 1;
+  for (let x = 0; x < W; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y < H; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
 
   // ── HEADER ──────────────────────────────────────────────────
-  // Title
-  ctx.fillStyle = '#f0f2f8';
-  ctx.font = `bold ${28}px 'Arial', sans-serif`;
-  ctx.fillText('SHOOTING BLANKS', 24, 44);
+  // Top accent bar
+  const barGrad = ctx.createLinearGradient(0, 0, W, 0);
+  barGrad.addColorStop(0, '#00c99a');
+  barGrad.addColorStop(0.5, '#7c6cfa');
+  barGrad.addColorStop(1, 'rgba(124,108,250,0)');
+  ctx.fillStyle = barGrad;
+  ctx.fillRect(0, 0, W, 3);
 
-  // Green underline accent
+  // Season name
+  ctx.fillStyle = '#ffffff';
+  ctx.font      = `bold 32px Arial`;
+  ctx.fillText('SHOOTING', 28, 50);
   ctx.fillStyle = '#00c99a';
-  ctx.fillRect(24, 52, 180, 2);
+  ctx.fillText('BLANKS', 28 + ctx.measureText('SHOOTING ').width - 4, 50);
 
-  // Week pill
-  const pillText = `Week ${week}`;
-  ctx.font = `600 ${12}px 'Arial', sans-serif`;
-  const pillW = ctx.measureText(pillText).width + 20;
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  roundRect(ctx, 24, 62, pillW, 22, 11);
-  ctx.fill();
-  ctx.fillStyle = '#9da3ba';
-  ctx.fillText(pillText, 34, 77);
+  // Season subtitle
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font      = `500 12px Arial`;
+  ctx.fillText('SQUAD LEAGUE  ·  SEASON STANDINGS', 28, 70);
 
-  // King line
-  ctx.fillStyle = '#f59e0b';
-  ctx.font = `600 ${14}px 'Arial', sans-serif`;
-  ctx.fillText(`👑  King: ${king}`, 24, 116);
+  // Week badge
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  roundRect(ctx, 28, 84, 76, 24, 12); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font      = `600 11px Arial`;
+  ctx.textAlign = 'center';
+  ctx.fillText(`WEEK ${week}`, 28 + 38, 100);
+  ctx.textAlign = 'left';
 
-  // Divider
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  ctx.fillRect(24, 128, W - 48, 1);
+  // King card
+  const kingCardX = 28, kingCardY = 118, kingCardW = W - 56, kingCardH = 28;
+  ctx.fillStyle = 'rgba(245,158,11,0.1)';
+  roundRect(ctx, kingCardX, kingCardY, kingCardW, kingCardH, 8); ctx.fill();
+  ctx.strokeStyle = 'rgba(245,158,11,0.25)';
+  ctx.lineWidth   = 1;
+  roundRect(ctx, kingCardX, kingCardY, kingCardW, kingCardH, 8); ctx.stroke();
+  ctx.fillStyle   = '#f59e0b';
+  ctx.font        = `600 13px Arial`;
+  ctx.fillText(`👑  King of the Week:  ${king}`, kingCardX + 12, kingCardY + 19);
+
+  // Header divider
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(0, padT - 8, W, 1);
 
   // ── PLAYER ROWS ─────────────────────────────────────────────
-  const medals  = ['🥇','🥈','🥉'];
-  const rankClr = ['#00c99a','#a5b4fc','#f59e0b'];
-  const rowBg   = ['rgba(0,229,176,0.07)','rgba(124,108,250,0.06)','rgba(245,158,11,0.06)'];
+  const rankColors  = ['#00c99a', '#a5b4fc', '#f59e0b'];
+  const rankBg      = ['rgba(0,229,176,0.08)', 'rgba(124,108,250,0.07)', 'rgba(245,158,11,0.07)'];
+  const rankBorder  = ['rgba(0,229,176,0.2)',  'rgba(124,108,250,0.18)', 'rgba(245,158,11,0.18)'];
 
   players.forEach((p, i) => {
-    const y = headerH + i * rowH;
+    const y   = padT + i * rowH;
+    const mid = y + rowH / 2;
 
-    // Row background for top 3
-    if (i < 3) {
-      ctx.fillStyle = rowBg[i];
-      roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 12);
-      ctx.fill();
+    // Row card for all players
+    const isTop3 = i < 3;
+    ctx.fillStyle   = isTop3 ? rankBg[i] : 'rgba(255,255,255,0.025)';
+    roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 14); ctx.fill();
+    if (isTop3) {
+      ctx.strokeStyle = rankBorder[i];
+      ctx.lineWidth   = 1;
+      roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 14); ctx.stroke();
     }
 
-    // Rank badge
-    ctx.fillStyle = i < 3 ? rankClr[i] : '#555a70';
-    ctx.font      = `bold ${i < 3 ? 18 : 15}px 'Arial', sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(medals[i] || String(p.rank), 36, y + rowH / 2 + 6);
-    ctx.textAlign = 'left';
+    // Left accent stripe for top 3
+    if (isTop3) {
+      ctx.fillStyle = rankColors[i];
+      roundRect(ctx, 12, y + 4, 3, rowH - 8, 2); ctx.fill();
+    }
 
-    // Name
-    ctx.fillStyle = '#f0f2f8';
-    ctx.font      = `600 ${15}px 'Arial', sans-serif`;
-    ctx.fillText(p.name, 58, y + rowH / 2 + 2);
+    // Rank number / medal
+    const medals = ['🥇','🥈','🥉'];
+    ctx.fillStyle   = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.3)';
+    ctx.font        = `bold ${isTop3 ? 20 : 14}px Arial`;
+    ctx.textAlign   = 'center';
+    ctx.fillText(medals[i] || p.rank, 42, mid + (isTop3 ? 7 : 5));
+    ctx.textAlign   = 'left';
 
-    // Tags (king/underdog)
-    let tagX = 58 + ctx.measureText(p.name).width + 10;
+    // Player name
+    ctx.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,0.85)';
+    ctx.font      = `bold ${16}px Arial`;
+    ctx.fillText(p.name, 62, mid + 6);
+
+    // Small tags
+    let tagX = 62 + ctx.measureText(p.name).width + 10;
     p.tags.forEach(tag => {
-      if (tag.includes('King')) {
-        ctx.fillStyle = 'rgba(245,158,11,0.18)';
-        const tw = ctx.measureText('👑').width + 10;
-        roundRect(ctx, tagX, y + rowH/2 - 9, tw, 16, 8);
-        ctx.fill();
-        ctx.fillStyle = '#f59e0b';
-        ctx.font = `600 ${10}px 'Arial', sans-serif`;
-        ctx.fillText('👑', tagX + 4, y + rowH/2 + 2);
-        tagX += tw + 4;
-      } else if (tag.includes('Underdog')) {
-        ctx.fillStyle = 'rgba(124,108,250,0.18)';
-        const tw = ctx.measureText('⚡').width + 10;
-        roundRect(ctx, tagX, y + rowH/2 - 9, tw, 16, 8);
-        ctx.fill();
-        ctx.fillStyle = '#a5b4fc';
-        ctx.font = `600 ${10}px 'Arial', sans-serif`;
-        ctx.fillText('⚡', tagX + 4, y + rowH/2 + 2);
-        tagX += tw + 4;
-      }
-      ctx.font = `600 ${15}px 'Arial', sans-serif`;
+      const isKing = tag.includes('King');
+      const isDog  = tag.includes('Underdog');
+      if (!isKing && !isDog) return;
+      const label  = isKing ? '👑' : '⚡';
+      const bg     = isKing ? 'rgba(245,158,11,0.2)' : 'rgba(124,108,250,0.2)';
+      const clr    = isKing ? '#f59e0b' : '#a5b4fc';
+      ctx.font     = `600 11px Arial`;
+      const tw     = ctx.measureText(label).width + 14;
+      ctx.fillStyle = bg;
+      roundRect(ctx, tagX, mid - 9, tw, 17, 8); ctx.fill();
+      ctx.fillStyle = clr;
+      ctx.fillText(label, tagX + 6, mid + 3);
+      tagX += tw + 5;
     });
 
-    // Points — right aligned
-    ctx.fillStyle = i === 0 ? '#00c99a' : '#f0f2f8';
-    ctx.font      = `bold ${18}px 'Arial', sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.fillText(p.pts, W - 42, y + rowH / 2 + 2);
-    ctx.fillStyle = '#555a70';
-    ctx.font      = `400 ${10}px 'Arial', sans-serif`;
-    ctx.fillText(p.unit, W - 24, y + rowH / 2 + 2);
-    ctx.textAlign = 'left';
-
-    // Row divider
-    if (i < players.length - 1) {
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.fillRect(24, y + rowH - 1, W - 48, 1);
-    }
+    // Points — right side
+    ctx.textAlign  = 'right';
+    ctx.fillStyle  = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.7)';
+    ctx.font       = `bold ${20}px Arial`;
+    ctx.fillText(p.pts, W - 48, mid + 7);
+    ctx.fillStyle  = 'rgba(255,255,255,0.25)';
+    ctx.font       = `400 10px Arial`;
+    ctx.fillText('pts', W - 28, mid + 7);
+    ctx.textAlign  = 'left';
   });
-
-  // ── FOOTER ──────────────────────────────────────────────────
-  const fy = headerH + players.length * rowH + 16;
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  ctx.fillRect(24, fy, W - 48, 1);
-  ctx.fillStyle = '#555a70';
-  ctx.font      = `400 ${11}px 'Arial', sans-serif`;
-  ctx.fillText('shootingblanks.squad', 24, fy + 24);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#00c99a';
-  ctx.fillText('SQUAD LEAGUE', W - 24, fy + 24);
-  ctx.textAlign = 'left';
 
   // ── SHARE ───────────────────────────────────────────────────
   canvas.toBlob(async (blob) => {
-    const file = new File([blob], 'shooting-blanks.png', { type: 'image/png' });
-    const url  = URL.createObjectURL(blob);
+    const file = new File([blob], `shooting-blanks-wk${week}.png`, { type: 'image/png' });
+    const dashUrl = siteUrl;
 
-    // Try Web Share API (native share sheet on mobile)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
           files: [file],
           title: `Shooting Blanks — Week ${week}`,
-          text:  `Season standings after Week ${week}. 👑 King: ${king}`,
+          text:  `👑 King: ${king}\n\nFull standings: ${dashUrl}`,
         });
         return;
       } catch (e) {
-        if (e.name === 'AbortError') return; // user cancelled
+        if (e.name === 'AbortError') return;
       }
     }
 
-    // Fallback: download the image
-    const a  = document.createElement('a');
-    a.href   = url;
+    // Fallback: download
+    const a = document.createElement('a');
+    a.href  = URL.createObjectURL(blob);
     a.download = `shooting-blanks-wk${week}.png`;
     a.click();
-    URL.revokeObjectURL(url);
     showToast('Image saved!', 'success');
   }, 'image/png');
 }
