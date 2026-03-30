@@ -164,7 +164,7 @@ const Engine = {
       if (!points[wId]) return;
       const ud = this.applyUnderdogMultiplier(wId, perWinner, underdogIds, cfg.underdogMultiplier);
       points[wId].pool      += round2(ud.finalPoints + kingEach);
-      points[wId].bonus     += round2(kingEach + upsetBonus);
+      points[wId].bonus     += round2(kingEach);  // only king slay, upset is in pool
       points[wId].underdog  += round2(ud.bonusOnly);
       points[wId].wins      += 1;
       points[wId].pool_wins += 1;
@@ -185,7 +185,7 @@ const Engine = {
     const upsetBonus = round2(firstBase - cfg.firstPts);
 
     points[winnerId][key]          += round2(ud.finalPoints + kingBonus);
-    points[winnerId].bonus         += round2(kingBonus + upsetBonus);
+    points[winnerId].bonus         += round2(kingBonus);  // only king slay, upset is in sport pts
     points[winnerId].underdog      += round2(ud.bonusOnly);
     points[winnerId].wins          += 1;
     points[winnerId][key + '_wins'] = (points[winnerId][key + '_wins'] || 0) + 1;
