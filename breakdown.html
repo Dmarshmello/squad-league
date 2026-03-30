@@ -145,17 +145,24 @@ function buildBreakdownForPlayer(playerId) {
 
     const others = pl.filter(p => p.player_id !== playerId).map(p => p.players?.name).filter(Boolean);
 
-    // Work out base pts to show the multiplier effect
-    const didWin  = myP.is_winner === true || (myP.is_winner === null && myP.position === 1);
-    const is2nd   = !didWin && myP.position === 2 && sport !== 'Pool';
+    const didWin = myP.is_winner === true || (myP.is_winner === null && myP.position === 1);
+    const is2nd  = !didWin && myP.position === 2 && sport !== 'Pool';
     const basePts = didWin
       ? (sport === 'Pool' ? cfg.poolWinPts : cfg.firstPts)
       : is2nd ? cfg.secondPts : 0;
 
+    // Work out what portion of bonus is upset vs king slay
+    // upset bonus is already reflected in sportPts (base × upsetMultiplier)
+    // so the "pure" upset portion = sportPts - basePts (before underdog scaling)
+    // king slay = whatever is left in bonus after removing upset
+    const sportBeforeUnderdog = round2(sportPts - underdog);
+    const upsetBonus  = round2(sportBeforeUnderdog - basePts);
+    // King slay = bonus - upset portion (since engine stores both in bonus)
+    const kingSlay    = round2(bonus - upsetBonus);
+
     const lines = [];
     if (didWin) {
-      lines.push({ label: `${sport} ${sport==='Pool'?'win':'1st place'} — base`, val: fmtPts(basePts) });
-      const upsetBonus = round2(sportPts - basePts - underdog);
+      lines.push({ label: `${sport} ${sport === 'Pool' ? 'win' : '1st place'} — base`, val: fmtPts(basePts) });
       if (upsetBonus > 0.01) lines.push({ label: `Upset bonus`, val: '+' + fmtPts(upsetBonus), pos: true });
     } else if (is2nd) {
       lines.push({ label: `${sport} 2nd place`, val: fmtPts(cfg.secondPts) });
@@ -163,7 +170,8 @@ function buildBreakdownForPlayer(playerId) {
       lines.push({ label: `No points earned this match`, val: '0' });
     }
     if (underdog > 0) lines.push({ label: `Underdog ×${cfg.underdogMultiplier}`, val: '+' + fmtPts(underdog), pos: true });
-    if (bonus > 0)    lines.push({ label: `Bonus (king slay / upset)`, val: '+' + fmtPts(bonus), pos: true });
+    // Only show king slay if there actually was one (positive remainder after upset)
+    if (kingSlay > 0.01) lines.push({ label: `👑 King slay bonus`, val: '+' + fmtPts(kingSlay), pos: true });
 
     const linesHtml = lines.map(l =>
       `<div class="breakdown-calc-row">
