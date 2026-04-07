@@ -16,17 +16,29 @@ const Engine = {
     return rankMap;
   },
 
-  // Returns array of player IDs all tied at the lowest season total
+  // Returns array of player IDs all tied at the lowest season total.
+  // Only considers players who appear in standingsArr (have earned points).
+  // If no one has points yet, returns empty — no underdog before week 1 results.
   getUnderdogIds(standingsArr, allPlayers) {
+    // Build totals only from players who have a standings row
     const totals = {};
-    allPlayers.forEach(p => { totals[p.id] = 0; });
     standingsArr.forEach(r => {
-      if (r.player_id !== undefined) totals[r.player_id] = parseFloat(r.total) || 0;
+      if (r.player_id !== undefined) {
+        totals[r.player_id] = parseFloat(r.total) || 0;
+      }
     });
+
+    // If nobody has played yet, no underdog
     const vals = Object.values(totals);
     if (!vals.length) return [];
+
     const lowest = Math.min(...vals);
-    return Object.entries(totals).filter(([, v]) => v === lowest).map(([id]) => id);
+
+    // Must be a unique lowest — if everyone is tied (all same score) treat
+    // them all as underdogs only when there is genuinely one (or more tied) bottom.
+    return Object.entries(totals)
+      .filter(([, v]) => v === lowest)
+      .map(([id]) => id);
   },
 
   // ── MULTIPLIERS ──────────────────────────────────────────
@@ -109,10 +121,19 @@ const Engine = {
       });
 
     } else if (poolMode === '2v2') {
-      placements.forEach(p => {
-        if (p.position <= 2) winnerGroup.push(p.player_id);
-        else                 loserGroup.push(p.player_id);
-      });
+      // Prefer isWinner flag (always set by the form) — fall back to position
+      const hasFlag2v2 = placements.some(p => p.isWinner === true || p.isWinner === false);
+      if (hasFlag2v2) {
+        placements.forEach(p => {
+          if (p.isWinner === true)  winnerGroup.push(p.player_id);
+          else                      loserGroup.push(p.player_id);
+        });
+      } else {
+        placements.forEach(p => {
+          if (p.position <= 2) winnerGroup.push(p.player_id);
+          else                 loserGroup.push(p.player_id);
+        });
+      }
 
     } else if (poolMode === '2v1') {
       // Use isWinner flag — always set by the form
@@ -155,16 +176,16 @@ const Engine = {
 
     const sidePoints = round2(base * bestUpset);
     const perWinner  = round2(sidePoints / winnerGroup.length);
+    // King slay: each winner on the team gets the full bonus individually
     const kingBonus  = this.getKingBonus(loserGroup, cfg._kingId, cfg.kingSlay);
-    const kingEach   = round2(kingBonus / winnerGroup.length);
     // Upset bonus portion (above base)
     const upsetBonus = round2((perWinner - (base / winnerGroup.length)));
 
     winnerGroup.forEach(wId => {
       if (!points[wId]) return;
       const ud = this.applyUnderdogMultiplier(wId, perWinner, underdogIds, cfg.underdogMultiplier);
-      points[wId].pool      += round2(ud.finalPoints + kingEach);
-      points[wId].bonus     += round2(kingEach);  // only king slay, upset is in pool
+      points[wId].pool      += round2(ud.finalPoints + kingBonus);
+      points[wId].bonus     += round2(kingBonus);  // only king slay, upset is in pool
       points[wId].underdog  += round2(ud.bonusOnly);
       points[wId].wins      += 1;
       points[wId].pool_wins += 1;

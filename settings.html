@@ -115,6 +115,24 @@
     <button class="btn btn-accent" id="run-reset">Run Weekly Reset</button>
   </div>
 
+  <!-- FULL RECALCULATION -->
+  <div class="reset-btn-area" style="border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.04)">
+    <div class="reset-text">
+      <div class="reset-title">♻️ Full Points Recalculation</div>
+      <div class="reset-sub">Wipes all points and replays every match from scratch — week by week, auto-detecting king &amp; underdogs at each step</div>
+    </div>
+    <button class="btn" id="run-recalc" style="background:rgba(245,158,11,0.15);color:#92400e;border:1px solid rgba(245,158,11,0.35);white-space:nowrap">♻️ Recalculate All</button>
+  </div>
+
+  <!-- RECALC PROGRESS -->
+  <div id="recalc-progress" style="display:none;margin:0 0 24px;padding:16px 20px;background:var(--card);border:1px solid var(--border);border-radius:12px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)">Recalculating…</div>
+    <div style="background:var(--bg);border-radius:8px;overflow:hidden;height:8px;margin-bottom:10px">
+      <div id="recalc-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s;border-radius:8px"></div>
+    </div>
+    <div id="recalc-log" style="font-size:12px;color:var(--muted);max-height:160px;overflow-y:auto;line-height:1.6"></div>
+  </div>
+
   <!-- MANUAL OVERRIDE -->
   <div class="settings-section">
     <div class="settings-section-title">⚙️ Manual Override</div>
@@ -330,8 +348,8 @@ document.getElementById('run-reset').addEventListener('click', async () => {
   if (!confirm('Run weekly reset?\n\n• Crown highest week scorer as King\n• Set all tied-lowest players as Underdogs\n• Advance week counter')) return;
 
   try {
-    const cfg = await DB.getConfig();
-    const sznRows  = await DB.getSeasonStandings(activeSeason.id);
+    const cfg     = await DB.getConfig();
+    const sznRows = await DB.getSeasonStandings(activeSeason.id);
 
     // King = whoever tops the season leaderboard (most total points overall)
     let bestPlayer = '', bestPts = -Infinity;
@@ -339,12 +357,15 @@ document.getElementById('run-reset').addEventListener('click', async () => {
       if ((r.total || 0) > bestPts) { bestPts = r.total; bestPlayer = r.players?.name || ''; }
     });
 
-    // Find underdogs — all tied at lowest season total
+    // Find underdogs — only players who have appeared in season_points (have played)
+    // Pre-seeding everyone at 0 was a bug — players with no matches shouldn't dilute the underdog pool
     const sznTotals = {};
-    allPlayers.forEach(p => { sznTotals[p.name] = 0; });
     sznRows.forEach(r => { if (r.players?.name) sznTotals[r.players.name] = parseFloat(r.total) || 0; });
-    const lowest    = Math.min(...Object.values(sznTotals));
-    const underdogs = Object.entries(sznTotals).filter(([,v]) => v === lowest).map(([n]) => n);
+    let underdogs = [];
+    if (Object.keys(sznTotals).length) {
+      const lowest = Math.min(...Object.values(sznTotals));
+      underdogs = Object.entries(sznTotals).filter(([,v]) => v === lowest).map(([n]) => n);
+    }
 
     const newWeek = cfg.currentWeek + 1;
     const saves   = [
@@ -357,8 +378,185 @@ document.getElementById('run-reset').addEventListener('click', async () => {
 
     const newCfg = await DB.getConfig();
     loadForm(newCfg, activeSeason);
-    showToast(`Reset done! King: ${bestPlayer||'TBD'} · Underdogs: ${underdogs.join(', ')} · Week ${newWeek}`, 'success');
+    showToast(`Reset done! King: ${bestPlayer||'TBD'} · Underdogs: ${underdogs.join(', ')||'none'} · Week ${newWeek}`, 'success');
   } catch (err) { showToast('Error: ' + err.message, 'error'); }
+});
+
+// ── FULL RECALCULATION ────────────────────────────────────
+document.getElementById('run-recalc').addEventListener('click', async () => {
+  if (!checkPassword()) { showToast('Incorrect password', 'error'); return; }
+  if (!confirm(
+    'Full Recalculation\n\n' +
+    'This will:\n' +
+    '• Wipe ALL points for the season\n' +
+    '• Replay every match oldest → newest\n' +
+    '• Auto-detect king & underdogs at each match\n' +
+    '• Update king/underdog config to match end state\n\n' +
+    'Continue?'
+  )) return;
+
+  const progressBox = document.getElementById('recalc-progress');
+  const bar         = document.getElementById('recalc-bar');
+  const log         = document.getElementById('recalc-log');
+  const btn         = document.getElementById('run-recalc');
+
+  function logLine(msg) {
+    log.innerHTML += msg + '<br>';
+    log.scrollTop = log.scrollHeight;
+  }
+  function setBar(pct) { bar.style.width = pct + '%'; }
+
+  progressBox.style.display = 'block';
+  log.innerHTML = '';
+  setBar(0);
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+
+  try {
+    logLine('⏳ Loading matches and config…');
+    const [cfg, allMatches] = await Promise.all([
+      DB.getConfig(),
+      DB.getAllMatchesAsc(activeSeason.id),
+    ]);
+
+    const active = allMatches.filter(m => !m.deleted);
+    logLine(`📋 Found ${active.length} matches to process (${allMatches.length - active.length} deleted, skipped)`);
+    logLine('🗑️ Clearing all existing points…');
+    await DB.clearAllPoints(activeSeason.id);
+    logLine('✅ Points cleared');
+    setBar(5);
+
+    // ── Replay loop ──────────────────────────────────────
+    const allPlayerIds = allPlayers.map(p => p.id);
+    const runningTotals = {};
+    allPlayerIds.forEach(id => {
+      runningTotals[id] = { pool:0, bowling:0, golf:0, bonus:0, underdog:0, total:0,
+        wins:0, pool_wins:0, bowling_wins:0, golf_wins:0 };
+    });
+
+    // weekTotals[week][playerId] = points earned that week (for king derivation)
+    const weekTotals = {};
+    const processedSoFar = [];
+
+    // Group matches by week for logging
+    const weekGroups = {};
+    active.forEach(m => {
+      if (!weekGroups[m.week]) weekGroups[m.week] = [];
+      weekGroups[m.week].push(m);
+    });
+    const weeks = Object.keys(weekGroups).map(Number).sort((a,b) => a-b);
+
+    logLine(`📅 Processing ${weeks.length} week(s): ${weeks.join(', ')}`);
+    logLine('─────────────────────────');
+
+    let matchesDone = 0;
+
+    for (const week of weeks) {
+      const weekMatches = weekGroups[week];
+
+      // Derive king for this week from previous week's top scorer
+      let kingId   = null;
+      let kingName = 'none';
+      const prevWeek = week - 1;
+      if (prevWeek >= 1 && weekTotals[prevWeek]) {
+        let topPts = -1;
+        Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
+          if (pts > topPts) { topPts = pts; kingId = pid; }
+        });
+        if (kingId) kingName = allPlayers.find(p => p.id === kingId)?.name || kingId;
+      }
+
+      // Derive underdogs from season totals so far (only players who have played)
+      const standingsArr = allPlayerIds.map(id => ({ player_id: id, total: runningTotals[id].total }));
+      const underdogIds  = Engine.getUnderdogIds(standingsArr, allPlayers);
+      const underdogNames = underdogIds.map(id => allPlayers.find(p => p.id === id)?.name || id);
+
+      logLine(`<b>Week ${week}</b> — King: ${kingName} · Underdogs: ${underdogNames.join(', ') || 'none'} · ${weekMatches.length} match(es)`);
+
+      const cfgNow = { ...cfg, _kingId: kingId };
+
+      for (const match of weekMatches) {
+        const rankMap = Engine.buildRankMap(standingsArr, allPlayers);
+        const pts = Engine.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);
+
+        const earners = [];
+        for (const [playerId, delta] of Object.entries(pts)) {
+          const earned = round2(delta.pool + delta.bowling + delta.golf + delta.bonus + delta.underdog);
+          if (earned !== 0 || delta.wins > 0) {
+            await DB.upsertWeekPoints(activeSeason.id, match.week, playerId, delta);
+            await DB.upsertSeasonPoints(activeSeason.id, playerId, delta);
+
+            const rt = runningTotals[playerId];
+            rt.pool         += delta.pool         || 0;
+            rt.bowling      += delta.bowling      || 0;
+            rt.golf         += delta.golf         || 0;
+            rt.bonus        += delta.bonus        || 0;
+            rt.underdog     += delta.underdog     || 0;
+            rt.wins         += delta.wins         || 0;
+            rt.pool_wins    += delta.pool_wins    || 0;
+            rt.bowling_wins += delta.bowling_wins || 0;
+            rt.golf_wins    += delta.golf_wins    || 0;
+            rt.total = round2(rt.pool + rt.bowling + rt.golf + rt.bonus + rt.underdog);
+
+            if (!weekTotals[match.week]) weekTotals[match.week] = {};
+            weekTotals[match.week][playerId] = round2(
+              (weekTotals[match.week][playerId] || 0) + earned
+            );
+
+            if (earned > 0) {
+              const pName = allPlayers.find(p => p.id === playerId)?.name || playerId;
+              earners.push(`${pName} +${fmtPts(earned)}`);
+            }
+          }
+        }
+
+        const sport = match.sport + (match.pool_mode ? ` ${match.pool_mode}` : '');
+        logLine(`&nbsp;&nbsp;└ ${sport}: ${earners.join(' · ') || 'no points'}`);
+        processedSoFar.push(match);
+
+        matchesDone++;
+        setBar(Math.round(5 + (matchesDone / active.length) * 85));
+      }
+    }
+
+    // ── Update config: king & underdog to reflect end state ──
+    logLine('─────────────────────────');
+    logLine('💾 Updating king & underdog config…');
+
+    // King = highest season total overall
+    let finalKingName = '', finalKingPts = -Infinity;
+    allPlayerIds.forEach(id => {
+      const t = runningTotals[id].total;
+      if (t > finalKingPts) { finalKingPts = t; finalKingName = allPlayers.find(p => p.id === id)?.name || ''; }
+    });
+
+    // Underdog = lowest season total among players who played
+    const finalStandings = allPlayerIds
+      .filter(id => runningTotals[id].total > 0 || runningTotals[id].wins > 0)
+      .map(id => ({ player_id: id, total: runningTotals[id].total }));
+    const finalUnderdogIds   = Engine.getUnderdogIds(finalStandings, allPlayers);
+    const finalUnderdogNames = finalUnderdogIds.map(id => allPlayers.find(p => p.id === id)?.name || id);
+
+    await Promise.all([
+      DB.setConfig('current_king',     finalKingName),
+      DB.setConfig('current_underdog', finalUnderdogNames.join(',')),
+    ]);
+
+    setBar(100);
+    logLine(`✅ Done! King: <b>${finalKingName || 'TBD'}</b> · Underdogs: <b>${finalUnderdogNames.join(', ') || 'none'}</b>`);
+    logLine('🎉 All points recalculated successfully!');
+
+    const newCfg = await DB.getConfig();
+    loadForm(newCfg, activeSeason);
+    showToast('Full recalc complete! All points updated.', 'success');
+
+  } catch (err) {
+    logLine(`❌ Error: ${err.message}`);
+    showToast('Recalc failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '♻️ Recalculate All';
+  }
 });
 
 // ── INIT ──────────────────────────────────────────────────
