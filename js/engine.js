@@ -258,16 +258,28 @@ const Engine = {
       const rankMap     = this.buildRankMap(standingsArr, allPlayers);
       const underdogIds = this.getUnderdogIds(standingsArr, allPlayers);
 
-      // Derive king for THIS match: whoever scored highest in the previous week
-      // Week 1 has no king. Week N uses the top scorer from week N-1.
+      // Derive king for THIS match: whoever scored highest in ANY previous week
+      // (uses the most recent week that had matches, handles non-contiguous weeks)
+      // Week 1 has no king.
       const cfgNow = { ...cfg, _kingId: null };
       const prevWeek = match.week - 1;
-      if (prevWeek >= 1 && weekTotals[prevWeek]) {
-        let topId = null, topPts = -1;
-        Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
-          if (pts > topPts) { topPts = pts; topId = pid; }
+      if (prevWeek >= 1) {
+        // Collect all week totals from weeks before this match's week
+        const combinedPrev = {};
+        Object.entries(weekTotals).forEach(([w, totals]) => {
+          if (parseInt(w) <= prevWeek) {
+            Object.entries(totals).forEach(([pid, pts]) => {
+              combinedPrev[pid] = round2((combinedPrev[pid] || 0) + pts);
+            });
+          }
         });
-        cfgNow._kingId = topId || null;
+        if (Object.keys(combinedPrev).length) {
+          let topId = null, topPts = -1;
+          Object.entries(combinedPrev).forEach(([pid, pts]) => {
+            if (pts > topPts) { topPts = pts; topId = pid; }
+          });
+          cfgNow._kingId = topId || null;
+        }
       }
 
       const pts = this.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);

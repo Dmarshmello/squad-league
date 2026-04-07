@@ -77,15 +77,25 @@ function replayAllMatches() {
     const rankMap      = Engine.buildRankMap(standingsArr, allPlayers);
     const underdogIds  = Engine.getUnderdogIds(standingsArr, allPlayers);
 
-    // King = top scorer from previous week (week 1 has no king)
+    // King = top scorer across ALL previous weeks (handles non-contiguous week numbers)
     const cfgNow = { ...cfg, _kingId: null };
     const prevWeek = match.week - 1;
-    if (prevWeek >= 1 && weekTotals[prevWeek]) {
-      let topId = null, topPts = -1;
-      Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
-        if (pts > topPts) { topPts = pts; topId = pid; }
+    if (prevWeek >= 1) {
+      const combinedPrev = {};
+      Object.entries(weekTotals).forEach(([w, totals]) => {
+        if (parseInt(w) <= prevWeek) {
+          Object.entries(totals).forEach(([pid, pts]) => {
+            combinedPrev[pid] = round2((combinedPrev[pid] || 0) + pts);
+          });
+        }
       });
-      cfgNow._kingId = topId || null;
+      if (Object.keys(combinedPrev).length) {
+        let topId = null, topPts = -1;
+        Object.entries(combinedPrev).forEach(([pid, pts]) => {
+          if (pts > topPts) { topPts = pts; topId = pid; }
+        });
+        cfgNow._kingId = topId || null;
+      }
     }
 
     const pts = Engine.calcMatch(match, cfgNow, rankMap, underdogIds, processedSoFar, allPlayerIds);

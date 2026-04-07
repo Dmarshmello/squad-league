@@ -454,16 +454,26 @@ document.getElementById('run-recalc').addEventListener('click', async () => {
     for (const week of weeks) {
       const weekMatches = weekGroups[week];
 
-      // Derive king for this week from previous week's top scorer
+      // Derive king: top scorer across ALL previous weeks (handles non-contiguous week numbers)
       let kingId   = null;
       let kingName = 'none';
       const prevWeek = week - 1;
-      if (prevWeek >= 1 && weekTotals[prevWeek]) {
-        let topPts = -1;
-        Object.entries(weekTotals[prevWeek]).forEach(([pid, pts]) => {
-          if (pts > topPts) { topPts = pts; kingId = pid; }
+      if (prevWeek >= 1) {
+        const combinedPrev = {};
+        Object.entries(weekTotals).forEach(([w, totals]) => {
+          if (parseInt(w) <= prevWeek) {
+            Object.entries(totals).forEach(([pid, pts]) => {
+              combinedPrev[pid] = round2((combinedPrev[pid] || 0) + pts);
+            });
+          }
         });
-        if (kingId) kingName = allPlayers.find(p => p.id === kingId)?.name || kingId;
+        if (Object.keys(combinedPrev).length) {
+          let topPts = -1;
+          Object.entries(combinedPrev).forEach(([pid, pts]) => {
+            if (pts > topPts) { topPts = pts; kingId = pid; }
+          });
+          if (kingId) kingName = allPlayers.find(p => p.id === kingId)?.name || kingId;
+        }
       }
 
       // Derive underdogs from season totals so far (only players who have played)
