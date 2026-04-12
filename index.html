@@ -600,7 +600,7 @@ async function loadDashboard() {
       ]);
       playerTagMap = tagMapRaw;
       tagRotations = rotData;
-    } catch (e) { /* tags are optional — don't break dashboard if they fail */ }
+    } catch (e) { console.warn('Failed to load funny tags:', e); }
 
     document.getElementById('hero-week').textContent = cfg.currentWeek;
     document.getElementById('hero-king').textContent = cfg.currentKing || 'TBD';

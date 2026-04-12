@@ -477,6 +477,7 @@ body::before {
 }
 .tag-king { background: rgba(245,158,11,0.15); color: var(--gold); border: 1px solid rgba(245,158,11,0.25); }
 .tag-dog  { background: rgba(99,102,241,0.15);  color: #a5b4fc; border: 1px solid rgba(99,102,241,0.25); }
+.tag-funny { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); font-style: italic; cursor: help; }
 
 .player-sports { display: flex; gap: 8px; align-items: center; }
 .sport-pip { display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -1150,6 +1151,17 @@ body::before {
 .tag-sport-pool { background: rgba(0,212,170,0.12); color: var(--pool);    border: 1px solid rgba(0,212,170,0.2); }
 .tag-sport-bowl { background: rgba(124,108,250,0.12); color: var(--bowling); border: 1px solid rgba(124,108,250,0.2); }
 .tag-sport-golf { background: rgba(56,189,248,0.12);  color: var(--golf);   border: 1px solid rgba(56,189,248,0.2); }
+
+/* ── FUNNY TAGS ─────────────────────────────────────────────── */
+.tag-funny {
+  background: rgba(239,68,68,0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239,68,68,0.25);
+  font-style: italic;
+  text-transform: none;
+  cursor: pointer;
+}
+.tag-funny:hover { background: rgba(239,68,68,0.22); }
 
 /* ── PLAYER POINTS DETAIL ROW ───────────────────────────────── */
 .pts-detail-item {
