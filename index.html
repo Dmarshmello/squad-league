@@ -110,7 +110,7 @@ function renderKing(king, standings, cfg, allPlayers) {
   const player = row?.players || allPlayers.find(p => p.name === king) || { name: king };
   el.innerHTML = `
     <div class="king-card">
-      <div class="king-badge">👑 King of the Week</div>
+      <div class="king-badge">👑 King</div>
       <div class="king-content">
         ${avatarHtml(player, 'king-avatar')}
         <div>

@@ -314,5 +314,25 @@ const Engine = {
 
       processedSoFar.push(match);
     }
+
+    // 4. Update current_king and current_underdog config to reflect live standings
+    //    King = player with highest season total
+    //    Underdog = player(s) tied at the lowest season total (among players who have played)
+    let liveKingName = '', liveKingPts = -Infinity;
+    allPlayerIds.forEach(id => {
+      const t = runningTotals[id].total;
+      if (t > liveKingPts) { liveKingPts = t; liveKingName = allPlayers.find(p => p.id === id)?.name || ''; }
+    });
+
+    const liveStandings = allPlayerIds
+      .filter(id => runningTotals[id].total > 0 || runningTotals[id].wins > 0)
+      .map(id => ({ player_id: id, total: runningTotals[id].total }));
+    const liveUnderdogIds   = this.getUnderdogIds(liveStandings, allPlayers);
+    const liveUnderdogNames = liveUnderdogIds.map(id => allPlayers.find(p => p.id === id)?.name || id);
+
+    await Promise.all([
+      DB.setConfig('current_king',     liveKingName),
+      DB.setConfig('current_underdog', liveUnderdogNames.join(',')),
+    ]);
   },
 };
