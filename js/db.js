@@ -256,4 +256,25 @@ const DB = {
     }
     return count;
   },
+
+  // ── TAG ROTATIONS ─────────────────────────────────────────
+  // Stored in config table as tag_rot_{playerId} = index (integer as string)
+  async getTagRotations(playerIds) {
+    const keys = playerIds.map(id => `tag_rot_${id}`);
+    const { data, error } = await db.from('config').select('key,value').in('key', keys);
+    if (error) throw error;
+    const result = {};
+    playerIds.forEach(id => { result[id] = 0; });
+    (data || []).forEach(r => {
+      const id = r.key.replace('tag_rot_', '');
+      result[id] = parseInt(r.value) || 0;
+    });
+    return result;
+  },
+
+  async setTagRotation(playerId, index) {
+    const { error } = await db.from('config')
+      .upsert({ key: `tag_rot_${playerId}`, value: String(index) }, { onConflict: 'key' });
+    if (error) throw error;
+  },
 };

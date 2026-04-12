@@ -97,6 +97,17 @@
 
 <div class="toast-container" id="toasts"></div>
 
+<!-- TAG POPUP -->
+<div class="modal-overlay hidden" id="tag-modal-overlay">
+  <div class="modal" style="max-width:320px;text-align:center">
+    <button class="modal-close" id="tag-modal-close">✕</button>
+    <div id="tag-modal-emoji" style="font-size:36px;margin-bottom:8px"></div>
+    <div class="modal-title" id="tag-modal-name" style="font-style:italic;color:#fca5a5"></div>
+    <div class="modal-meta" id="tag-modal-player" style="margin-bottom:12px"></div>
+    <div id="tag-modal-desc" style="font-size:14px;color:var(--text);line-height:1.6;padding:12px 16px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.15);border-radius:10px"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script src="js/db.js"></script>
@@ -110,7 +121,7 @@ function renderKing(king, standings, cfg, allPlayers) {
   const player = row?.players || allPlayers.find(p => p.name === king) || { name: king };
   el.innerHTML = `
     <div class="king-card">
-      <div class="king-badge">👑 King</div>
+      <div class="king-badge">👑 King of the Week</div>
       <div class="king-content">
         ${avatarHtml(player, 'king-avatar')}
         <div>
@@ -124,7 +135,7 @@ function renderKing(king, standings, cfg, allPlayers) {
     </div>`;
 }
 
-function renderLeaderboard(standings, allPlayers, cfg) {
+function renderLeaderboard(standings, allPlayers, cfg, playerTagMap, tagRotations) {
   const el   = document.getElementById('leaderboard');
   const seen = new Set(standings.map(r => r.player_id));
   const extra = allPlayers.filter(p => !seen.has(p.id)).map(p => ({
@@ -172,6 +183,18 @@ function renderLeaderboard(standings, allPlayers, cfg) {
       gw > 0 ? `<span class="tag tag-sport-golf">⛳ ${gw}W</span>` : '',
     ].filter(Boolean).join('');
 
+    // Rotating funny tag
+    let funnyTag = '';
+    if (playerTagMap && tagRotations) {
+      const pid  = row.player_id;
+      const tags = playerTagMap[pid] || [];
+      if (tags.length > 0) {
+        const idx   = (tagRotations[pid] || 0) % tags.length;
+        const tag   = tags[idx];
+        funnyTag = `<span class="tag tag-funny" data-tag-label="${tag.label}" data-tag-desc="${tag.desc}" data-player-name="${player.name}" onclick="openTagPopup(this)">${tag.label}</span>`;
+      }
+    }
+
     return `
       <div class="player-row ${rank <= 3 ? 'rank-'+rank : ''}" style="animation-delay:${i*0.06}s">
         <div class="rank-badge">${rank}</div>
@@ -179,7 +202,7 @@ function renderLeaderboard(standings, allPlayers, cfg) {
         <div class="player-meta">
           <div class="player-name">${player.name}</div>
           <div class="player-tags">
-            ${statusTags}${winTags}
+            ${statusTags}${winTags}${funnyTag}
           </div>
           <div class="player-pts-detail">
             <span class="pts-detail-item"><span class="pts-detail-label">Win pts</span> <span class="pts-detail-val">${fmtPts(sportPts)}</span></span>
@@ -266,23 +289,34 @@ function renderRecentMatches(matches) {
 }
 
 async function shareStandings() {
-  const week = document.getElementById('hero-week')?.textContent || '?';
-  const king = document.getElementById('hero-king')?.textContent || 'TBD';
-  const rows = [...document.querySelectorAll('#leaderboard .player-row')];
+  const week    = document.getElementById('hero-week')?.textContent || '?';
+  const king    = document.getElementById('hero-king')?.textContent || 'TBD';
+  const underdog = document.getElementById('hero-dog')?.textContent || 'TBD';
   const siteUrl = window.location.href.split('?')[0];
 
-  const players = rows.map((row, i) => ({
-    rank: i + 1,
-    name: row.querySelector('.player-name')?.textContent?.trim() || '?',
-    pts:  row.querySelector('.pts-num')?.textContent?.trim()     || '0',
-    tags: [...row.querySelectorAll('.tag')].map(t => t.textContent.trim()),
-  }));
+  // Pull data directly from the leaderboard DOM rows
+  const rows = [...document.querySelectorAll('#leaderboard .player-row')];
+  const players = rows.map((row, i) => {
+    const tags     = [...row.querySelectorAll('.tag')].map(t => t.textContent.trim());
+    const isKing   = tags.some(t => t.includes('King') && !t.includes('Slay'));
+    const isDog    = tags.some(t => t.includes('Underdog'));
+    const funnyTag = row.querySelector('.tag-funny')?.textContent?.trim() || '';
+    return {
+      rank:     i + 1,
+      name:     row.querySelector('.player-name')?.textContent?.trim() || '?',
+      pts:      row.querySelector('.pts-num')?.textContent?.trim()     || '0',
+      isKing,
+      isDog,
+      funnyTag,
+    };
+  });
 
-  const dpr  = Math.min(window.devicePixelRatio || 2, 3);
-  const W    = 460;
-  const rowH = 62;
-  const padT = 160;
-  const H    = padT + players.length * rowH + 32;
+  const dpr    = Math.min(window.devicePixelRatio || 2, 3);
+  const W      = 520;
+  const rowH   = 72;   // taller rows to fit name + tags
+  const headerH = 180;
+  const footerH = 44;
+  const H      = headerH + players.length * rowH + footerH;
 
   const canvas  = document.createElement('canvas');
   canvas.width  = W * dpr;
@@ -290,160 +324,228 @@ async function shareStandings() {
   const ctx     = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  // ── BACKGROUND ──────────────────────────────────────────────
-  // Deep dark base
-  ctx.fillStyle = '#080a0f';
+  // ── BACKGROUND ──────────────────────────────────────────
+  ctx.fillStyle = '#07090e';
   ctx.fillRect(0, 0, W, H);
 
-  // Multi-point gradient mesh
-  const g1 = ctx.createRadialGradient(0, 0, 0, 0, 0, 320);
-  g1.addColorStop(0, 'rgba(0,229,176,0.10)');
-  g1.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
+  // Radial glows
+  const glows = [
+    { x: 0,     y: 0,     r: 380, c: 'rgba(0,201,154,0.13)' },
+    { x: W,     y: H,     r: 340, c: 'rgba(124,108,250,0.11)' },
+    { x: W*0.5, y: H*0.4, r: 260, c: 'rgba(245,158,11,0.05)' },
+    { x: W,     y: 0,     r: 220, c: 'rgba(239,68,68,0.06)'  },
+  ];
+  glows.forEach(g => {
+    const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
+    gr.addColorStop(0, g.c);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, W, H);
+  });
 
-  const g2 = ctx.createRadialGradient(W, H, 0, W, H, 300);
-  g2.addColorStop(0, 'rgba(124,108,250,0.09)');
-  g2.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
-
-  const g3 = ctx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.3, 200);
-  g3.addColorStop(0, 'rgba(245,158,11,0.04)');
-  g3.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = g3; ctx.fillRect(0, 0, W, H);
-
-  // Subtle grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-  ctx.lineWidth   = 1;
-  for (let x = 0; x < W; x += 40) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-  }
-  for (let y = 0; y < H; y += 40) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  // Subtle dot grid
+  ctx.fillStyle = 'rgba(255,255,255,0.018)';
+  for (let x = 20; x < W; x += 32) {
+    for (let y = 20; y < H; y += 32) {
+      ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
-  // ── HEADER ──────────────────────────────────────────────────
-  // Top accent bar
+  // ── TOP ACCENT BAR ──────────────────────────────────────
   const barGrad = ctx.createLinearGradient(0, 0, W, 0);
-  barGrad.addColorStop(0, '#00c99a');
-  barGrad.addColorStop(0.5, '#7c6cfa');
-  barGrad.addColorStop(1, 'rgba(124,108,250,0)');
+  barGrad.addColorStop(0,   '#00c99a');
+  barGrad.addColorStop(0.45,'#7c6cfa');
+  barGrad.addColorStop(0.75,'#ef4444');
+  barGrad.addColorStop(1,   'rgba(124,108,250,0)');
   ctx.fillStyle = barGrad;
-  ctx.fillRect(0, 0, W, 3);
+  ctx.fillRect(0, 0, W, 4);
 
-  // Season name
+  // ── HEADER ──────────────────────────────────────────────
+  // Logo
+  ctx.font      = `bold 34px Arial`;
   ctx.fillStyle = '#ffffff';
-  ctx.font      = `bold 32px Arial`;
-  ctx.fillText('SHOOTING', 28, 50);
+  const shootW  = ctx.measureText('SHOOTING').width;
+  ctx.fillText('SHOOTING', 28, 52);
   ctx.fillStyle = '#00c99a';
-  ctx.fillText('BLANKS', 28 + ctx.measureText('SHOOTING ').width - 4, 50);
+  ctx.fillText('BLANKS', 28 + shootW + 6, 52);
 
-  // Season subtitle
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.font      = `500 12px Arial`;
+  ctx.font      = `500 11px Arial`;
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.fillText('SQUAD LEAGUE  ·  SEASON STANDINGS', 28, 70);
 
-  // Week badge
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  roundRect(ctx, 28, 84, 76, 24, 12); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font      = `600 11px Arial`;
+  // Week pill
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  roundRect(ctx, 28, 82, 80, 22, 11); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, 28, 82, 80, 22, 11); ctx.stroke();
+  ctx.font      = `700 11px Arial`;
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.textAlign = 'center';
-  ctx.fillText(`WEEK ${week}`, 28 + 38, 100);
+  ctx.fillText(`WEEK ${week}`, 28 + 40, 97);
   ctx.textAlign = 'left';
 
+  // King + Underdog cards side by side
+  const cardY = 114, cardH = 34, cardGap = 10;
+  const cardW = (W - 56 - cardGap) / 2;
+
   // King card
-  const kingCardX = 28, kingCardY = 118, kingCardW = W - 56, kingCardH = 28;
   ctx.fillStyle = 'rgba(245,158,11,0.1)';
-  roundRect(ctx, kingCardX, kingCardY, kingCardW, kingCardH, 8); ctx.fill();
-  ctx.strokeStyle = 'rgba(245,158,11,0.25)';
-  ctx.lineWidth   = 1;
-  roundRect(ctx, kingCardX, kingCardY, kingCardW, kingCardH, 8); ctx.stroke();
-  ctx.fillStyle   = '#f59e0b';
-  ctx.font        = `600 13px Arial`;
-  ctx.fillText(`👑  King of the Week:  ${king}`, kingCardX + 12, kingCardY + 19);
+  roundRect(ctx, 28, cardY, cardW, cardH, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(245,158,11,0.3)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, 28, cardY, cardW, cardH, 10); ctx.stroke();
+  ctx.font      = `600 12px Arial`;
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText(`👑  ${king}`, 28 + 12, cardY + 22);
 
-  // Header divider
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(0, padT - 8, W, 1);
+  // Underdog card
+  const dogX = 28 + cardW + cardGap;
+  ctx.fillStyle = 'rgba(99,102,241,0.1)';
+  roundRect(ctx, dogX, cardY, cardW, cardH, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(99,102,241,0.3)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, dogX, cardY, cardW, cardH, 10); ctx.stroke();
+  ctx.font      = `600 12px Arial`;
+  ctx.fillStyle = '#a5b4fc';
+  ctx.fillText(`⚡  ${underdog}`, dogX + 12, cardY + 22);
 
-  // ── PLAYER ROWS ─────────────────────────────────────────────
-  const rankColors  = ['#00c99a', '#a5b4fc', '#f59e0b'];
-  const rankBg      = ['rgba(0,229,176,0.08)', 'rgba(124,108,250,0.07)', 'rgba(245,158,11,0.07)'];
-  const rankBorder  = ['rgba(0,229,176,0.2)',  'rgba(124,108,250,0.18)', 'rgba(245,158,11,0.18)'];
+  // Divider
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.fillRect(0, headerH - 6, W, 1);
+
+  // ── PLAYER ROWS ─────────────────────────────────────────
+  const rankColors = ['#00c99a', '#a5b4fc', '#f59e0b'];
+  const rankBg     = ['rgba(0,201,154,0.09)', 'rgba(124,108,250,0.08)', 'rgba(245,158,11,0.08)'];
+  const rankBorder = ['rgba(0,201,154,0.22)', 'rgba(124,108,250,0.2)',  'rgba(245,158,11,0.2)'];
+  const medals     = ['🥇','🥈','🥉'];
 
   players.forEach((p, i) => {
-    const y   = padT + i * rowH;
-    const mid = y + rowH / 2;
-
-    // Row card for all players
+    const y      = headerH + i * rowH;
+    const cx     = y + rowH / 2;  // vertical centre of row
     const isTop3 = i < 3;
-    ctx.fillStyle   = isTop3 ? rankBg[i] : 'rgba(255,255,255,0.025)';
-    roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 14); ctx.fill();
+    const pad    = 14;
+
+    // Row background
+    ctx.fillStyle = isTop3 ? rankBg[i] : (i % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(255,255,255,0.008)');
+    roundRect(ctx, pad, y + 5, W - pad * 2, rowH - 10, 14); ctx.fill();
+
     if (isTop3) {
+      // Glow border
       ctx.strokeStyle = rankBorder[i];
-      ctx.lineWidth   = 1;
-      roundRect(ctx, 12, y + 4, W - 24, rowH - 8, 14); ctx.stroke();
-    }
+      ctx.lineWidth = 1;
+      roundRect(ctx, pad, y + 5, W - pad * 2, rowH - 10, 14); ctx.stroke();
 
-    // Left accent stripe for top 3
-    if (isTop3) {
+      // Left accent stripe
       ctx.fillStyle = rankColors[i];
-      roundRect(ctx, 12, y + 4, 3, rowH - 8, 2); ctx.fill();
+      roundRect(ctx, pad, y + 5, 3, rowH - 10, 2); ctx.fill();
+
+      // Subtle inner glow on left
+      const glow = ctx.createLinearGradient(pad, 0, pad + 80, 0);
+      glow.addColorStop(0, rankBg[i].replace('0.09','0.18').replace('0.08','0.16'));
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      roundRect(ctx, pad, y + 5, W - pad * 2, rowH - 10, 14); ctx.fill();
     }
 
-    // Rank number / medal
-    const medals = ['🥇','🥈','🥉'];
-    ctx.fillStyle   = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.3)';
-    ctx.font        = `bold ${isTop3 ? 20 : 14}px Arial`;
-    ctx.textAlign   = 'center';
-    ctx.fillText(medals[i] || p.rank, 42, mid + (isTop3 ? 7 : 5));
-    ctx.textAlign   = 'left';
+    // Rank / medal
+    ctx.font      = isTop3 ? `bold 20px Arial` : `bold 13px Arial`;
+    ctx.fillStyle = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.25)';
+    ctx.textAlign = 'center';
+    ctx.fillText(medals[i] || String(p.rank), pad + 22, cx + (isTop3 ? 7 : 5));
+    ctx.textAlign = 'left';
 
-    // Player name
-    ctx.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,0.85)';
-    ctx.font      = `bold ${16}px Arial`;
-    ctx.fillText(p.name, 62, mid + 6);
+    // Name
+    const nameX = pad + 52;
+    ctx.font      = `bold 15px Arial`;
+    ctx.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,0.88)';
+    ctx.fillText(p.name, nameX, cx - 6);
 
-    // Small tags
-    let tagX = 62 + ctx.measureText(p.name).width + 10;
-    p.tags.forEach(tag => {
-      const isKing = tag.includes('King');
-      const isDog  = tag.includes('Underdog');
-      if (!isKing && !isDog) return;
-      const label  = isKing ? '👑' : '⚡';
-      const bg     = isKing ? 'rgba(245,158,11,0.2)' : 'rgba(124,108,250,0.2)';
-      const clr    = isKing ? '#f59e0b' : '#a5b4fc';
-      ctx.font     = `600 11px Arial`;
-      const tw     = ctx.measureText(label).width + 14;
-      ctx.fillStyle = bg;
-      roundRect(ctx, tagX, mid - 9, tw, 17, 8); ctx.fill();
-      ctx.fillStyle = clr;
-      ctx.fillText(label, tagX + 6, mid + 3);
+    // Status tags inline after name (King / Underdog)
+    let tagX = nameX + ctx.measureText(p.name).width + 8;
+    const statusTags = [];
+    if (p.isKing) statusTags.push({ emoji: '👑', bg: 'rgba(245,158,11,0.22)', clr: '#f59e0b' });
+    if (p.isDog)  statusTags.push({ emoji: '⚡', bg: 'rgba(99,102,241,0.22)',  clr: '#a5b4fc' });
+
+    statusTags.forEach(st => {
+      ctx.font = `600 11px Arial`;
+      const tw  = ctx.measureText(st.emoji).width + 14;
+      ctx.fillStyle = st.bg;
+      roundRect(ctx, tagX, cx - 15, tw, 17, 8); ctx.fill();
+      ctx.fillStyle = st.clr;
+      ctx.fillText(st.emoji, tagX + 6, cx - 3);
       tagX += tw + 5;
     });
 
-    // Points — right side
+    // Funny tag — shown below name in red italic
+    if (p.funnyTag) {
+      ctx.font      = `italic 600 11px Arial`;
+      ctx.fillStyle = 'rgba(252,165,165,0.9)';
+      // Small tag pill
+      const ftw = ctx.measureText(p.funnyTag).width + 16;
+      ctx.fillStyle = 'rgba(239,68,68,0.15)';
+      roundRect(ctx, nameX, cx + 4, ftw, 16, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(239,68,68,0.3)';
+      ctx.lineWidth = 0.8;
+      roundRect(ctx, nameX, cx + 4, ftw, 16, 8); ctx.stroke();
+      ctx.fillStyle = 'rgba(252,165,165,0.95)';
+      ctx.font      = `italic 600 11px Arial`;
+      ctx.fillText(p.funnyTag, nameX + 8, cx + 15);
+    }
+
+    // Points — right aligned
     ctx.textAlign  = 'right';
-    ctx.fillStyle  = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.7)';
-    ctx.font       = `bold ${20}px Arial`;
-    ctx.fillText(p.pts, W - 48, mid + 7);
-    ctx.fillStyle  = 'rgba(255,255,255,0.25)';
+    ctx.font       = `bold 22px Arial`;
+    ctx.fillStyle  = isTop3 ? rankColors[i] : 'rgba(255,255,255,0.75)';
+    ctx.fillText(p.pts, W - pad - 22, cx + 4);
     ctx.font       = `400 10px Arial`;
-    ctx.fillText('pts', W - 28, mid + 7);
+    ctx.fillStyle  = 'rgba(255,255,255,0.22)';
+    ctx.fillText('pts', W - pad - 4, cx + 4);
     ctx.textAlign  = 'left';
+
+    // Separator line between rows (not after last)
+    if (i < players.length - 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad + 40, y + rowH);
+      ctx.lineTo(W - pad, y + rowH);
+      ctx.stroke();
+    }
   });
 
-  // ── SHARE ───────────────────────────────────────────────────
+  // ── FOOTER ──────────────────────────────────────────────
+  const footY = H - footerH;
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fillRect(0, footY, W, 1);
+
+  ctx.font      = `500 11px Arial`;
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fillText('shootingblanks.league', 28, footY + 26);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillText(new Date().toLocaleDateString('en-AU', { day:'2-digit', month:'short', year:'numeric' }), W - 28, footY + 26);
+  ctx.textAlign = 'left';
+
+  // Bottom accent bar
+  const botBar = ctx.createLinearGradient(0, 0, W, 0);
+  botBar.addColorStop(0,   'rgba(124,108,250,0)');
+  botBar.addColorStop(0.5, '#7c6cfa');
+  botBar.addColorStop(1,   '#00c99a');
+  ctx.fillStyle = botBar;
+  ctx.fillRect(0, H - 3, W, 3);
+
+  // ── SHARE ───────────────────────────────────────────────
   canvas.toBlob(async (blob) => {
     const file = new File([blob], `shooting-blanks-wk${week}.png`, { type: 'image/png' });
-    const dashUrl = siteUrl;
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
           files: [file],
           title: `Shooting Blanks — Week ${week}`,
-          text:  `👑 King: ${king}\n\nFull standings: ${dashUrl}`,
+          text:  `👑 King: ${king}\n\nFull standings: ${siteUrl}`,
         });
         return;
       } catch (e) {
@@ -485,6 +587,21 @@ async function loadDashboard() {
       DB.getRecentMatches(season.id),
     ]);
 
+    // Load tag map and rotations
+    let playerTagMap = null, tagRotations = null;
+    try {
+      const playerIds = players.map(p => p.id);
+      const [tagMapRaw, rotData] = await Promise.all([
+        (async () => {
+          const { data } = await db.from('config').select('value').eq('key', 'player_tags').limit(1);
+          return data && data.length ? JSON.parse(data[0].value) : null;
+        })(),
+        DB.getTagRotations(playerIds),
+      ]);
+      playerTagMap = tagMapRaw;
+      tagRotations = rotData;
+    } catch (e) { /* tags are optional — don't break dashboard if they fail */ }
+
     document.getElementById('hero-week').textContent = cfg.currentWeek;
     document.getElementById('hero-king').textContent = cfg.currentKing || 'TBD';
     document.getElementById('hero-dog').textContent  = cfg.currentUnderdogs?.join(', ') || 'TBD';
@@ -495,7 +612,7 @@ async function loadDashboard() {
 
     document.getElementById('prize-king').textContent = cfg.monthlyKing || 'TBD — season in progress';
     document.getElementById('prize-desc').textContent = season.monthly_reward || 'Free meal for the monthly king';
-    renderLeaderboard(seasonStandings, players, cfg);
+    renderLeaderboard(seasonStandings, players, cfg, playerTagMap, tagRotations);
     renderWeekTable(weekStandings, players);
     renderRecentMatches(recentMatches);
 
@@ -519,6 +636,34 @@ loadDashboard();
 // Refresh whenever user returns to this tab
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadDashboard(); });
 window.addEventListener('focus', loadDashboard);
+
+// ── TAG POPUP ─────────────────────────────────────────────
+function openTagPopup(el) {
+  const label      = el.dataset.tagLabel || '';
+  const desc       = el.dataset.tagDesc  || '';
+  const playerName = el.dataset.playerName || '';
+
+  // Extract emoji from label (first char if it's an emoji, else use 🏷️)
+  const emojiMatch = label.match(/(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/u);
+  const emoji      = emojiMatch ? emojiMatch[0] : '🏷️';
+  // Label without the emoji
+  const cleanLabel = label.replace(/[\u{1F300}-\u{1FAFF}🎱🎳⛳💀]/gu, '').trim();
+
+  document.getElementById('tag-modal-emoji').textContent  = emoji;
+  document.getElementById('tag-modal-name').textContent   = cleanLabel;
+  document.getElementById('tag-modal-player').textContent = playerName;
+  document.getElementById('tag-modal-desc').textContent   = desc;
+  document.getElementById('tag-modal-overlay').classList.remove('hidden');
+}
+
+function closeTagModal() {
+  document.getElementById('tag-modal-overlay').classList.add('hidden');
+}
+
+document.getElementById('tag-modal-close').addEventListener('click', closeTagModal);
+document.getElementById('tag-modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('tag-modal-overlay')) closeTagModal();
+});
 </script>
 </body>
 </html>
