@@ -503,6 +503,10 @@ document.getElementById('run-recalc').addEventListener('click', async () => {
       DB.setConfig('current_underdog', finalUnderdogNames.join(',')),
     ]);
 
+    logLine('🏷️ Computing funny tags…');
+    await Engine.updateTags(activeSeason.id, allMatches, allPlayers, runningTotals);
+    logLine('✅ Funny tags updated');
+
     setBar(100);
     logLine(`✅ Done! King: <b>${finalKingName || 'TBD'}</b> · Underdogs: <b>${finalUnderdogNames.join(', ') || 'none'}</b>`);
     logLine('🎉 All points recalculated successfully!');
